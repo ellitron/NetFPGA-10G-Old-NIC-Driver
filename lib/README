@@ -1,0 +1,36 @@
+#################################################################
+#
+#  NetFPGA-10G http://www.netfpga.org
+#
+#  Project:
+#          Release README - Library
+#                 
+#  Revision history:
+#          2010/12/17 hyzeng: Initial check-in
+#
+#################################################################
+
+The lib directory is used for storing IP cores that are dressed up and 
+organized as Xilinx EDK pcores, ready to be composed in an EDK project. 
+In EDK, these pcores can have associated software (i.e. its "driver") 
+which is kept in the sw/ directory, separated from the hardware for 
+that pcore in the hw/ directory. "std" is the name of the standard IP 
+library for the NetFPGA-10G platform. Users thus have the ability to 
+create a separate library for their own IP if so desired. 
+
+In the example below, we can see how EDK stores the hardware and 
+software files for the MDIO pcore.
+ 
+|-- lib
+|   |-- hw
+|   |   `-- std
+|   |       `-- pcores
+|   |           `-- nf10_mdio_v1_00_a
+|   `-- sw
+|       `-- std
+|           `-- drivers
+|               `-- nf10_mdio_v1_00_a
+
+For a complete list of modules in the library, please visit
+
+http://netfpga10g.pbworks.com/IP-Library

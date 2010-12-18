@@ -1,0 +1,26 @@
+#////////////////////////////////////////////////////////////////////////
+#//
+#//  NetFPGA-10G http://www.netfpga.org
+#//
+#//  Module:
+#//          nf10_1g_interface_v2_1_0.pao
+#//
+#//  Description:
+#//          Peripheral Analyze Order File
+#//                 
+#//  Revision history:
+#//          2010/11/28 hyzeng: Initial check-in
+#//
+#////////////////////////////////////////////////////////////////////////
+
+lib nf10_1g_interface_v1_00_a gmac.v verilog
+lib nf10_1g_interface_v1_00_a mac.v verilog
+lib nf10_1g_interface_v1_00_a mac_block.v verilog
+lib nf10_1g_interface_v1_00_a gtx_dual_1000X.v verilog
+lib nf10_1g_interface_v1_00_a nf10_1g_interface.v verilog
+lib nf10_1g_interface_v1_00_a rocketio_wrapper_gtx.v verilog
+lib nf10_1g_interface_v1_00_a rocketio_wrapper_gtx_tile.v verilog
+lib nf10_1g_interface_v1_00_a small_async_fifo.v verilog
+lib nf10_1g_interface_v1_00_a tx_queue.v verilog
+lib nf10_1g_interface_v1_00_a rx_queue.v verilog
+lib nf10_1g_interface_v1_00_a dummy_gtx.v verilog

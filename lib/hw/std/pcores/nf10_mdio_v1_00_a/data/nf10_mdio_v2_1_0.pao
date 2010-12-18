@@ -1,0 +1,20 @@
+#////////////////////////////////////////////////////////////////////////
+#//
+#//  NetFPGA-10G http://www.netfpga.org
+#//
+#//  Module:
+#//          nf10_mdio_v2_1_0.pao
+#//
+#//  Description:
+#//          Peripheral Analyze Order File
+#//                 
+#//  Revision history:
+#//          2010/12/8 hyzeng: Initial check-in
+#//
+#////////////////////////////////////////////////////////////////////////
+
+lib proc_common_v3_00_a all
+lib nf10_mdio_v1_00_a mdio_if.vhd vhdl
+lib nf10_mdio_v1_00_a axi_interface.vhd vhdl
+lib nf10_mdio_v1_00_a mdio_ipif.vhd vhdl
+lib nf10_mdio_v1_00_a nf10_mdio.vhd vhdl

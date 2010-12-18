@@ -1,0 +1,34 @@
+#################################################################
+#
+#  NetFPGA-10G http://www.netfpga.org
+#
+#  Project:
+#          Release README - Project
+#                 
+#  Revision history:
+#          2010/12/10 hyzeng: Initial check-in
+#
+#################################################################
+
+The projects directory houses individual projects. Although users are 
+free here to organize their project's directory however they want, using 
+whatever tools they want, EDK projects generally separate hardware and 
+software at the root level into hw/ and sw/ subdirectories. 
+
+The example projects below were made using EDK and so exhibit this characteristic. 
+ 
+`-- projects
+    |-- loopback_test
+    |   |-- hw
+    |   `-- sw
+    |-- loopback_test_1g
+    |   |-- hw
+    |   `-- sw
+    |-- production_test
+    |   |-- doc
+    |   |-- hw
+    |   `-- sw
+    
+For a complete list of projects, please visit
+
+http://netfpga10g.pbworks.com/Projects

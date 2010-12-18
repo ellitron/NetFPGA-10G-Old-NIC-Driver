@@ -1,0 +1,12 @@
+run
+-opt_mode speed
+-netlist_hierarchy as_optimized
+-opt_level 1
+-p virtex6
+-top axi_interconnect_memory_mapped_lite_0_wrapper
+-ifmt MIXED
+-ifn axi_interconnect_memory_mapped_lite_0_wrapper_xst.prj
+-ofn ../implementation/axi_interconnect_memory_mapped_lite_0_wrapper.ngc
+-hierarchy_separator /
+-iobuf NO
+-sd {../implementation/axi_interconnect_memory_mapped_lite_0_wrapper}
