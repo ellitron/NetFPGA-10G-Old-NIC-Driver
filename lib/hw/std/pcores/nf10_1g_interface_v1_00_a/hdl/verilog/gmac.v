@@ -46,7 +46,7 @@ module gmac
     input			gtxclk_1,
     input           GTRESET, 
 
-   //Local Link Interface
+   //Client Interface
    input  [7 : 0]  tx_data_0,
    input  	   	   tx_data_valid_0,
    output          tx_ack_0,
@@ -56,7 +56,7 @@ module gmac
    output          rx_good_frame_0,
    output          rx_bad_frame_0,
    
-   //Local Link Interface
+   //Client Interface
    input  [7 : 0]  tx_data_1,
    input  	   	   tx_data_valid_1,
    output          tx_ack_1,
@@ -103,7 +103,7 @@ module gmac
 
     BUFG clk62_5_bufg (.I(clk62_5_pre_bufg), .O(clk62_5));
 
-    mac_block v5_emac_block_inst
+    mac_block mac_block
     (
     // EMAC0 Clocking
     // 125MHz clock output from transceiver

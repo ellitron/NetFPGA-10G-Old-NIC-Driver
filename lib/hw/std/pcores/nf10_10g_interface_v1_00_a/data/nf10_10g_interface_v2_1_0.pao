@@ -19,8 +19,8 @@ lib nf10_10g_interface_v1_00_a tx_queue.v verilog
 lib nf10_10g_interface_v1_00_a rx_queue.v verilog
 lib nf10_10g_interface_v1_00_a nf10_10g_interface.v verilog
 lib nf10_10g_interface_v1_00_a small_async_fifo.v verilog
-lib nf10_10g_interface_v1_00_a xilinx/tx_sync.v verilog
-lib nf10_10g_interface_v1_00_a xilinx/chanbond_monitor.v verilog
-lib nf10_10g_interface_v1_00_a xilinx/cc_2b_1skp.v verilog
-lib nf10_10g_interface_v1_00_a xilinx/xgmac.v verilog
-lib nf10_10g_interface_v1_00_a xilinx/xaui.v verilog
+lib nf10_10g_interface_v1_00_a tx_sync.v verilog
+lib nf10_10g_interface_v1_00_a chanbond_monitor.v verilog
+lib nf10_10g_interface_v1_00_a cc_2b_1skp.v verilog
+lib nf10_10g_interface_v1_00_a xgmac.v verilog
+lib nf10_10g_interface_v1_00_a xaui.v verilog
