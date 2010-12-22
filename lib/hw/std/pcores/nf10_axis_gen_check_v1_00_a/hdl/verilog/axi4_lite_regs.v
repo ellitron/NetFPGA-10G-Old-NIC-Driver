@@ -10,6 +10,7 @@
 //                 
 //  Revision history:
 //          2010/12/15 hyzeng   Initial check-in
+//          2010/12/21 M.Blott  Fixed CDC
 //
 ////////////////////////////////////////////////////////////////////////
 
@@ -72,7 +73,7 @@ module axi4_lite_regs
     reg [31:0] rx_count_r_2, rx_count_r;
     reg [31:0] err_count_r_2, err_count_r;
     reg        count_reset_control_next, count_reset_control;
-    reg        count_reset_r;
+    reg        count_reset_r_2, count_reset_r;
     // synthesis attribute ASYNC_REG of tx_count_r is "TRUE";
     // synthesis attribute ASYNC_REG of rx_count_r is "TRUE";
     // synthesis attribute ASYNC_REG of err_count_r is "TRUE";
@@ -205,7 +206,8 @@ module axi4_lite_regs
     end
     
     always @(AXIS_ACLK) begin
-        count_reset <= count_reset_r;
+        count_reset <= count_reset_r_2;
+        count_reset_r_2 <= count_reset_r;
     end
 
 endmodule

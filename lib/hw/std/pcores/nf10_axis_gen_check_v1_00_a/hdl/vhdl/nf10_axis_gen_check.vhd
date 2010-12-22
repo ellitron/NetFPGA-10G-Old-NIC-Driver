@@ -11,6 +11,7 @@
 --  Revision history:
 --          2010/12/1  M.Blott  Initial version
 --          2010/12/15 hyzeng   Fixed last signal, AXI4-Lite
+--          2010/12/21 M.Blott  fixed reset issue
 --
 ------------------------------------------------------------------------
 
@@ -176,10 +177,12 @@ begin
 gen_p: process(ACLK, ARESETN)
 begin
    if (ARESETN='0') then
+      M_AXIS_TSTRB <= (others => '0');
+      M_AXIS_TVALID <= '0';
+      M_AXIS_TLAST <= '0';
       gen_word_num <= (others => '0');
       tx_count <= (others => '0');
-      pkt_tx_buf <= seed(C_S_AXIS_DATA_WIDTH -1 downto 0);
-      gen_state <= GEN_PKT;
+      gen_state <= GEN_IFG; -- initiate to between frames
    elsif (ACLK = '1' and ACLK'event) then
       if gen_state = GEN_PKT then 
 		 M_AXIS_TSTRB <= (others => '1');
