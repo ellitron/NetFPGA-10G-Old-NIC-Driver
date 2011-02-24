@@ -53,7 +53,7 @@ module tx_queue
    reg  tlast_delay, eop_axi_delay;
    
    assign tready = ~fifo_almost_full;
-   assign eop_axi = tready & tlast;
+   assign eop_axi = tvalid & tlast;
    
    
    // Instantiate clock domain crossing FIFO
@@ -82,7 +82,7 @@ module tx_queue
 		.RDEN(fifo_rd_en),
 		.RST(reset),
 		.WRCLK(clk),
-		.WREN((tvalid | (tlast & ~tlast_delay)) & tready) // Only 1 cycle per packet 
+		.WREN((tvalid) & tready)
    	);
 
    	small_async_fifo 

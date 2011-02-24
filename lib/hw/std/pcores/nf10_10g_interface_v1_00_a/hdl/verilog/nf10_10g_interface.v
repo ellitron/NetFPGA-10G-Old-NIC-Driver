@@ -25,6 +25,7 @@ module nf10_10g_interface
     // Master AXI Stream Data Width
     parameter C_M_AXIS_DATA_WIDTH=64,
     parameter C_S_AXIS_DATA_WIDTH=64,
+    parameter C_INCLUDE_ERR=1,
     parameter C_XAUI_REVERSE=0,
     parameter C_XGMAC_CONFIGURATION = {5'b01000, 64'h0583000000000000},
     parameter C_XAUI_CONFIGURATION = 7'b0

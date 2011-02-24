@@ -19,10 +19,10 @@ module rx_queue
 )
 (
    // AXI side
-   output [AXI_DATA_WIDTH-1:0]  tdata,
-   output [AXI_DATA_WIDTH/8-1:0]  tstrb,
-   output tvalid,
-   output tlast,
+   output reg [AXI_DATA_WIDTH-1:0]  tdata,
+   output reg [AXI_DATA_WIDTH/8-1:0]  tstrb,
+   output reg tvalid,
+   output reg tlast,
    input  tready,
         
    output reg err_tvalid,
@@ -44,7 +44,8 @@ module rx_queue
    
    localparam ERR_IDLE = 0;
    localparam ERR_WAIT = 1;
-
+   localparam ERR_BUBBLE = 2;
+   
    wire fifo_almost_full;
    wire fifo_empty;
    reg  fifo_wr_en;
@@ -55,6 +56,10 @@ module rx_queue
    
    reg  [2:0] state, state_next;
    reg  [2:0] err_state, err_state_next;
+   
+   wire [AXI_DATA_WIDTH-1:0]  tdata_delay;
+   wire [AXI_DATA_WIDTH/8-1:0]  tstrb_delay;
+   reg  rx_fifo_rd_en;
    
    // Instantiate clock domain crossing FIFO
    FIFO18 #(
@@ -68,8 +73,8 @@ module rx_queue
    	) rx_fifo (
 		.ALMOSTEMPTY(),
 		.ALMOSTFULL(fifo_almost_full),
-		.DO(tdata),
-		.DOP(tstrb),
+		.DO(tdata_delay),
+		.DOP(tstrb_delay),
 		.EMPTY(fifo_empty),
 		.FULL(),
 		.RDCOUNT(),
@@ -79,7 +84,7 @@ module rx_queue
 		.DI(rx_data),
 		.DIP(rx_data_valid),
 		.RDCLK(clk),
-		.RDEN((~fifo_empty & tready)),
+		.RDEN(rx_fifo_rd_en),
 		.RST(reset),
 		.WRCLK(clk125),
 		.WREN(fifo_wr_en) 
@@ -107,10 +112,14 @@ module rx_queue
 	     .rrst_n(~reset),
          .wrst_n(~reset)
          );
-   	    
-     assign tlast = ~fifo_empty & ~tstrb;
-     assign tvalid = ~fifo_empty & tstrb;
-         
+     
+     always @(posedge clk) begin
+         if(rx_fifo_rd_en) begin
+             tdata <= tdata_delay;
+             tstrb <= tstrb_delay;
+         end
+     end
+              
      always @* begin
          state_next = state;
          fifo_wr_en = 1'b0;
@@ -142,21 +151,43 @@ module rx_queue
              end
          endcase
      end
+
+
    
      always @* begin
          info_fifo_rd_en = 0;
          err_state_next = err_state;
          err_tvalid = 0;
+                           
+         rx_fifo_rd_en = 0;
+         tlast = 0;
+         tvalid = 0;
+         
          case(err_state)
              ERR_IDLE: begin
-                 if(tlast) begin // End of the packet
+                 tvalid = (~fifo_empty);
+                 rx_fifo_rd_en = (~fifo_empty & tready);
+                 if(tstrb_delay == 1'b0 & ~fifo_empty) begin // End of the packet
                      err_state_next = ERR_WAIT;
+                     rx_fifo_rd_en = 0;
+                     tvalid = 0;
                  end
              end
              ERR_WAIT: begin
                  if(~info_fifo_empty) begin
-                     info_fifo_rd_en = 1;
-                     err_tvalid = rx_bad_frame_fifo;
+                 	tlast = 1;
+                 	tvalid = 1;
+                 	if(tready) begin
+                     	info_fifo_rd_en = 1;
+                     	rx_fifo_rd_en = 1;
+                     	err_tvalid = rx_bad_frame_fifo;
+                     	err_state_next = ERR_BUBBLE;
+                    end
+                 end
+             end
+             ERR_BUBBLE: begin
+                 if(~fifo_empty) begin // Head of the packet
+                     rx_fifo_rd_en = 1;
                      err_state_next = ERR_IDLE;
                  end
              end
@@ -173,7 +204,7 @@ module rx_queue
      end
      always @(posedge clk or posedge reset) begin
          if(reset) begin
-             err_state <= ERR_IDLE;
+             err_state <= ERR_BUBBLE;
          end
          else begin
              err_state <= err_state_next;

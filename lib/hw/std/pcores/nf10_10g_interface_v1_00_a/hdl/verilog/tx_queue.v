@@ -56,7 +56,7 @@ module tx_queue
    reg  eop_axi_delay, tlast_delay;
    
    assign tready = ~fifo_almost_full;
-   assign eop_axi = (tlast | (tvalid & (tstrb_encoded != 4'h7)));
+   assign eop_axi = (tlast);
    
    // Instantiate clock domain crossing FIFO
    FIFO36_72 #(
@@ -83,12 +83,12 @@ module tx_queue
 		.WRCOUNT(),
 		.WRERR(),
 		.DI(tdata),
-		.DIP({eop_axi , ( tvalid ? tstrb_encoded : 4'h8)}), // 4'h8 is translated to zero.
+		.DIP({eop_axi , tstrb_encoded}),
 		.RDCLK(clk156),
 		.RDEN(fifo_rd_en),
 		.RST(reset),
 		.WRCLK(clk),
-		.WREN((tvalid | (tlast & ~tlast_delay)) & tready) // Only 1 cycle per packet 
+		.WREN(tvalid & tready)
    	);
 
    	small_async_fifo 
@@ -191,6 +191,6 @@ module tx_queue
      always @(posedge clk) begin
          eop_axi_delay <= eop_axi;
          tlast_delay <= tlast;
-         info_fifo_wr_en <= eop_axi & ~eop_axi_delay; // Only 1 cycle
+         info_fifo_wr_en <= tlast & tvalid;
      end
 endmodule

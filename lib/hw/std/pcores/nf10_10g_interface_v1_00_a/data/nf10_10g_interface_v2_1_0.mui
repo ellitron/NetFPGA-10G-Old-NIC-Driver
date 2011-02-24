@@ -38,8 +38,14 @@
                 S2MM Memory Map Data Width</tip>
         </widget>
         '>
+        <!ENTITY C_INCLUDE_ERR ' 
+        <widget id="C_INCLUDE_ERR">
+	            <key>C_INCLUDE_ERR</key>
+	            <label>Include ERR subchannel</label>
+	            <tip>1 to enable the ERR subchannel, 0 by default</tip>
+        </widget>
+        '>
 ]>
-
 <doc>
         <view id="System">
                 <display>System</display>
@@ -47,7 +53,7 @@
                         <display>AXI</display>
                         <item>&C_M_AXIS_DATA_WIDTH;</item>
                         <item>&C_S_AXIS_DATA_WIDTH;</item>
- 
+                        <item>&C_INCLUDE_ERR;</item> 
                 </group>
                 <group id="XAUI">
                         <display>XAUI</display>

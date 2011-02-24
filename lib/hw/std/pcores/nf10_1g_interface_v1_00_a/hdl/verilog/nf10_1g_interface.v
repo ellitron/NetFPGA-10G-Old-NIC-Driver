@@ -21,7 +21,8 @@ module nf10_1g_interface
 #(
     // Master AXI Stream Data Width
     parameter C_M_AXIS_DATA_WIDTH=8,
-    parameter C_S_AXIS_DATA_WIDTH=8
+    parameter C_S_AXIS_DATA_WIDTH=8,
+    parameter C_INCLUDE_ERR=1
 )
 (
     // Part 1: System side signals
