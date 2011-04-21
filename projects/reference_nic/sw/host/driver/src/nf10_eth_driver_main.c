@@ -744,16 +744,23 @@ static struct pci_driver pci_driver = {
 /* Called to fill @buf when user reads our file in /proc. */
 int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *data)
 {
+	unsigned int c;
 	int i;
 	
-	i = sprintf(buf, "NetFPGA-10G Ethernet Driver\n-----------------------------\n");
-	i += sprintf(buf[i], "TX Flags:\n");	
+	c = sprintf(buf, "NetFPGA-10G Ethernet Driver\n-----------------------------\n");
+	c += sprintf(&buf[c], "TX Flags:\n");	
 
-	//for(i=0; i<DMA_CPU_BUFS; i++) {
-	//	sprintf(buf, "
+	for(i=0; i<DMA_CPU_BUFS; i++)
+		c += sprintf(&buf[c], "\t%d:\t0x%08x\n", i, tx_dma_stream.flags[i]);
+
+	c += sprintf(&buf[c], "RX Flags:\n");
+	
+	for(i=0; i<DMA_CPU_BUFS; i++)
+		c += sprintf(&buf[c], "\t%d:\t0x%08x\n", i, rx_dma_stream.flags[i]);
+	
 
 	*eof = 1;
-	return i; 
+	return c; 
 }
 
 /* Initialization. */
