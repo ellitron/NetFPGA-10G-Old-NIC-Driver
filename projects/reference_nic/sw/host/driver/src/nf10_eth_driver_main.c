@@ -191,6 +191,8 @@ int genl_cmd_dma_tx(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	/* Wait for buffer to be free. */
+	/* FIXME: actually in the case that the buffer is not free... let's instead send a msg
+	 * to the user and exit this function. */
 	waited = 0;
 	while(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
 		if(!waited)
@@ -531,6 +533,9 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	sma1_regs->control	= OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;	
 	bias_regs->control	= OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
 
+	/* Read/Write memory barrier. */
+	mb();
+
 	/* Initialize workers. */
 
 	/* FIXME: need to double check everything below for problems with ooe. */
@@ -568,6 +573,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		pci_disable_device(pdev);	
 		return err;
 	}
+
+	mb();
 
 	/* Configure workers. */
 
@@ -676,6 +683,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dp1_props->remoteMetadataSize,
 		dp1_props->remoteFlagBase,
 		dp1_props->remoteFlagPitch);
+
+	mb();
 
 	/* Start workers. */
 
