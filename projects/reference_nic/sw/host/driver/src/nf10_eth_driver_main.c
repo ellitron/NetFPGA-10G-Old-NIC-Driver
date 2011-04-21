@@ -625,6 +625,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	dp1_props->remoteFlagBase	= (uint32_t)rx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * DMA_CPU_BUFS;
 	dp1_props->remoteFlagPitch	= sizeof(uint32_t);
 	dp1_props->control		= OCDP_CONTROL(OCDP_CONTROL_PRODUCER, OCDP_ACTIVE_MESSAGE);
+	
+	mb();
 
 	PDEBUG("probe(): configured dataplane OCPI workers:\n"
 		"\tTX path dataplane properties (dp0, worker %d):\n"
@@ -683,8 +685,6 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dp1_props->remoteMetadataSize,
 		dp1_props->remoteFlagBase,
 		dp1_props->remoteFlagPitch);
-
-	mb();
 
 	/* Start workers. */
 
