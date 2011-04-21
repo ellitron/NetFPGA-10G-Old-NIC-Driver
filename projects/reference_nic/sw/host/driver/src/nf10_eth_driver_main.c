@@ -419,9 +419,9 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	PDEBUG("probe(): successfully mapped BAR0 MMIO region:\n"
-		"\tBAR0: Virtual address:\t0x%016llx\n"
-		"\tBAR0: Physical address:\t0x%016llx\n"
-		"\tBAR0 Size:\t\t%d\n",
+		"\tBAR0: Virtual address:\t\t0x%016llx\n"
+		"\tBAR0: Physical address:\t\t0x%016llx\n"
+		"\tBAR0 Size:\t\t\t%d\n",
 		/* FIXME: typcasting might throw warnings on 32-bit systems... */
 		(uint64_t)bar0_base_va, (uint64_t)pci_resource_start(pdev, BAR_0), bar0_size);
 
@@ -580,7 +580,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	tx_dma_stream.flags	= (uint32_t *)(tx_dma_stream.metadata + DMA_CPU_BUFS);
 	tx_dma_stream.doorbell	= &dp0_props->nRemoteDone; 
 	tx_dma_stream.buf_index	= 0;
-	memset((void*)tx_dma_stream.flags, 1, DMA_BUF_SIZE * sizeof(uint32_t));
+	memset((void*)tx_dma_stream.flags, 1, DMA_CPU_BUFS * sizeof(uint32_t));
 
 	dp0_props->nLocalBuffers 	= DMA_FPGA_BUFS;
 	dp0_props->nRemoteBuffers 	= DMA_CPU_BUFS;
@@ -593,7 +593,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	dp0_props->remoteMetadataBase	= (uint32_t)tx_dma_reg_pa + DMA_CPU_BUFS * DMA_BUF_SIZE;
 	dp0_props->remoteBufferSize	= DMA_BUF_SIZE;
 	dp0_props->remoteMetadataSize	= sizeof(OcdpMetadata);
-	dp0_props->remoteFlagBase	= (uint32_t)tx_dma_reg_pa + (DMA_CPU_BUFS + sizeof(OcdpMetadata)) * DMA_BUF_SIZE;
+	dp0_props->remoteFlagBase	= (uint32_t)tx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * DMA_CPU_BUFS;
 	dp0_props->remoteFlagPitch	= sizeof(uint32_t);
 	dp0_props->control		= OCDP_CONTROL(OCDP_CONTROL_CONSUMER, OCDP_ACTIVE_MESSAGE);
 
@@ -602,7 +602,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rx_dma_stream.flags	= (uint32_t *)(rx_dma_stream.metadata + DMA_CPU_BUFS);
 	rx_dma_stream.doorbell	= &dp1_props->nRemoteDone; 
 	rx_dma_stream.buf_index	= 0;
-	memset((void*)rx_dma_stream.flags, 0, DMA_BUF_SIZE * sizeof(uint32_t));
+	memset((void*)rx_dma_stream.flags, 0, DMA_CPU_BUFS * sizeof(uint32_t));
 
 	dp1_props->nLocalBuffers 	= DMA_FPGA_BUFS;
 	dp1_props->nRemoteBuffers 	= DMA_CPU_BUFS;
@@ -615,9 +615,67 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	dp1_props->remoteMetadataBase	= (uint32_t)rx_dma_reg_pa + DMA_CPU_BUFS * DMA_BUF_SIZE;
 	dp1_props->remoteBufferSize	= DMA_BUF_SIZE;
 	dp1_props->remoteMetadataSize	= sizeof(OcdpMetadata);
-	dp1_props->remoteFlagBase	= (uint32_t)rx_dma_reg_pa + (DMA_CPU_BUFS + sizeof(OcdpMetadata)) * DMA_BUF_SIZE;
+	dp1_props->remoteFlagBase	= (uint32_t)rx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * DMA_CPU_BUFS;
 	dp1_props->remoteFlagPitch	= sizeof(uint32_t);
 	dp1_props->control		= OCDP_CONTROL(OCDP_CONTROL_PRODUCER, OCDP_ACTIVE_MESSAGE);
+
+	PDEBUG("probe(): configured dataplane OCPI workers:\n"
+		"\tTX path dataplane properties (dp0, worker %d):\n"
+		"\t\tnLocalBuffers:\t\t%d\n"
+		"\t\tnRemoteBuffers:\t\t%d\n"
+		"\t\tlocalBufferBase:\t0x%08x\n"
+		"\t\tlocalMetadataBase:\t0x%08x\n"
+		"\t\tlocalBufferSize:\t%d\n"
+		"\t\tlocalMetadataSize:\t%d\n"
+		"\t\tmemoryBytes:\t\t%d\n"
+		"\t\tremoteBufferBase:\t0x%08x\n"
+		"\t\tremoteMetadataBase:\t0x%08x\n"
+		"\t\tremoteBufferSize:\t%d\n"
+		"\t\tremoteMetadataSize:\t%d\n"
+		"\t\tremoteFlagBase:\t\t0x%08x\n"
+		"\t\tremoteFlagPitch:\t%d\n"
+		"\tRX path dataplane properties (dp1, worker %d):\n"
+		"\t\tnLocalBuffers:\t\t%d\n"
+		"\t\tnRemoteBuffers:\t\t%d\n"
+		"\t\tlocalBufferBase:\t0x%08x\n"
+		"\t\tlocalMetadataBase:\t0x%08x\n"
+		"\t\tlocalBufferSize:\t%d\n"
+		"\t\tlocalMetadataSize:\t%d\n"
+		"\t\tmemoryBytes:\t\t%d\n"
+		"\t\tremoteBufferBase:\t0x%08x\n"
+		"\t\tremoteMetadataBase:\t0x%08x\n"
+		"\t\tremoteBufferSize:\t%d\n"
+		"\t\tremoteMetadataSize:\t%d\n"
+		"\t\tremoteFlagBase:\t\t0x%08x\n"
+		"\t\tremoteFlagPitch:\t%d\n",
+		WORKER_DP0,
+		dp0_props->nLocalBuffers,
+		dp0_props->nRemoteBuffers,
+		dp0_props->localBufferBase,
+		dp0_props->localMetadataBase,
+		dp0_props->localBufferSize,
+		dp0_props->localMetadataSize,
+		dp0_props->memoryBytes,
+		dp0_props->remoteBufferBase,
+		dp0_props->remoteMetadataBase,
+		dp0_props->remoteBufferSize,
+		dp0_props->remoteMetadataSize,
+		dp0_props->remoteFlagBase,
+		dp0_props->remoteFlagPitch,
+		WORKER_DP1,
+		dp1_props->nLocalBuffers,
+		dp1_props->nRemoteBuffers,
+		dp1_props->localBufferBase,
+		dp1_props->localMetadataBase,
+		dp1_props->localBufferSize,
+		dp1_props->localMetadataSize,
+		dp1_props->memoryBytes,
+		dp1_props->remoteBufferBase,
+		dp1_props->remoteMetadataBase,
+		dp1_props->remoteBufferSize,
+		dp1_props->remoteMetadataSize,
+		dp1_props->remoteFlagBase,
+		dp1_props->remoteFlagPitch);
 
 	/* Start workers. */
 
@@ -686,8 +744,16 @@ static struct pci_driver pci_driver = {
 /* Called to fill @buf when user reads our file in /proc. */
 int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *data)
 {
+	int i;
+	
+	i = sprintf(buf, "NetFPGA-10G Ethernet Driver\n-----------------------------\n");
+	i += sprintf(buf[i], "TX Flags:\n");	
+
+	//for(i=0; i<DMA_CPU_BUFS; i++) {
+	//	sprintf(buf, "
+
 	*eof = 1;
-	return sprintf(buf, "NetFPGA-10G Ethernet driver says: Hello procfs!\n");
+	return i; 
 }
 
 /* Initialization. */
