@@ -580,7 +580,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	*sma0_props = 1;
 	*bias_props = 0;
-	*sma1_props = 1;
+	*sma1_props = 2;
 
 	tx_dma_stream.buffers	= (uint8_t *)tx_dma_reg_va;
 	tx_dma_stream.metadata	= (OcdpMetadata *)(tx_dma_stream.buffers + DMA_CPU_BUFS * DMA_BUF_SIZE);
