@@ -226,7 +226,7 @@ static void do_echo(int argc, char *argv[])
 static int do_dma_tx_recv_ack_cb(struct nl_msg *msg, void *arg)
 {
 	/* FIXME: msg doesn't really make sense to user... */
-	printf("Received ACK\n");
+	//printf("Received ACK\n");
 
 	return 0;
 }
@@ -292,7 +292,8 @@ static int do_dma_rx_recv_msg_cb(struct nl_msg *msg, void *arg)
 		}
 
 		/* Cheating a bit... */
-		nl_msg_dump(msg, stdout);
+		//nl_msg_dump(msg, stdout);
+		printf("%s\n", nla_data(na));
 	}
 	else {
 		printf("Didn't find any data to receive\n");
