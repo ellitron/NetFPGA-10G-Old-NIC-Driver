@@ -1,4 +1,7 @@
 /* FIXME: Add proper comment headers. */
+/* FIXME: Make function comment headers that of standard linux style. */
+/* FIXME: Make naming conistent (pci_driver, probe, remove vs. nf10_netdev_ops... nf10_ prefix?? */
+/* FIXME: replace tabs with 4 spaces. */
 
 /* Documentation resources:
  * kernel/Documentation/DMA-API-HOWTO.txt
@@ -9,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/pci.h>
 #include <net/genetlink.h>
@@ -19,7 +23,17 @@
 #include "occp.h"
 #include "ocdp.h"
 
+/* Function prototypes. */
+static int                      nf10_ndo_open(struct net_device *netdev);
+static int                      nf10_ndo_stop(struct net_device *netdev);
+static netdev_tx_t              nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev);
+static void                     nf10_ndo_tx_timeout(struct net_device *netdev);
+static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev);
+
 char driver_name[] = "nf10_eth_driver";
+
+/* Network devices to be registered with the kernel. */
+struct net_device *nf10_netdev;
 
 /* MMIO */
 /* Like the DMA variables, probe() and remove() both use bar0_base_va, so need
@@ -38,8 +52,8 @@ struct dma_stream	tx_dma_stream;	/* To device. */
 struct dma_stream	rx_dma_stream;	/* From device. */
 
 /* DMA parameters. */
-#define		DMA_BUF_SIZE	2048	/* Size of buffer for each DMA transfer. */
-#define		DMA_FPGA_BUFS	4	/* Number of buffers on the FPGA side. */
+#define		DMA_BUF_SIZE	2048	/* Size of buffer for each DMA transfer. Property of the hardware. */
+#define		DMA_FPGA_BUFS	4	/* Number of buffers on the FPGA side. Property of the hardware. */
 #define		DMA_CPU_BUFS	8	/* Number of buffers on the CPU side. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
@@ -47,11 +61,19 @@ struct dma_stream	rx_dma_stream;	/* From device. */
 
 /* Bundle of variables to keep track of a unidirectional DMA stream. */
 struct dma_stream {
-	uint8_t 	*buffers;
-	OcdpMetadata	*metadata;
-	uint32_t	*flags;
-	uint32_t	*doorbell;
-	uint32_t	buf_index;
+	uint8_t         *buffers;
+	OcdpMetadata    *metadata;
+	uint32_t        *flags;
+	uint32_t        *doorbell;
+	uint32_t        buf_index;
+};
+
+static const struct net_device_ops nf10_netdev_ops = {
+    .ndo_open               = nf10_ndo_open,
+    .ndo_stop               = nf10_ndo_stop,
+    .ndo_start_xmit         = nf10_ndo_start_xmit,
+    .ndo_tx_timeout         = nf10_ndo_tx_timeout,
+    .ndo_get_stats          = nf10_ndo_get_stats,
 };
 
 /* OpenCPI */
@@ -351,30 +373,146 @@ static struct pci_device_id id_table[] = {
  * /lib/modules/KVERSION/modules.pcimap file, written to by depmod. */
 MODULE_DEVICE_TABLE(pci, id_table);
 
+/* Define our net_device operations here. */
+static int nf10_ndo_open(struct net_device *netdev)
+{
+	PDEBUG("nf10_ndo_open(): Opening net device\n");	
+
+    /* Tell the kernel we're ready for transmitting packets. */
+    netif_start_queue(netdev);
+
+    return 0;
+}
+
+static int nf10_ndo_stop(struct net_device *netdev)
+{
+	PDEBUG("nf10_ndo_stop(): Closing net device\n");	
+
+    /* Tell the kernel we can't transmit anymore. */
+    netif_stop_queue(netdev);
+
+    return 0;
+}
+
+
+static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev)
+{
+    void *data;
+    uint32_t len;
+    int waited;
+	
+    PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");	
+
+    /* Get data and length. */
+    data = (void*)skb->data;
+    len = skb->len;
+
+    /* FIXME: When hardware is ready, may need to insert code here to check that the length
+     * is within the limits of what the hardware can handle. For now I'll just use this 
+     * temporary check */
+    /* Also wondering for len... if the preamble/FCS are included. */
+    if(len < ETH_ZLEN || len > ETH_FRAME_LEN) {
+        PDEBUG("nf10_ndo_start_xmit(): packet length %d out of bounds [%d, %d]\n", len, ETH_ZLEN, ETH_FRAME_LEN);
+    }
+
+    /* Check length against the DMA buffer size. */
+    if(len > DMA_BUF_SIZE) {
+        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d greater than buffer size %d\n", driver_name, len, DMA_BUF_SIZE);
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
+    }
+
+    /* Start the clock! */
+    netdev->trans_start = jiffies;
+
+    /* DMA the packet to the hardware. */
+
+    /* Wait for buffer to be free. */
+    /* FIXME: Want to use netif_{stop,wake}_queue functions, except that presently we have
+     * no interrupts for tx, so we don't have a proper way to call netif_wake_queue aside
+     * from setting a timer and a callback. For now... just wait. */
+    waited = 0;
+    while(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
+        if(!waited)
+            PDEBUG("nf10_ndo_start_xmit(): waiting for buffer: %d\n", tx_dma_stream.buf_index);
+        waited = 1;
+    }
+
+    /* Presently the hardware requires that we send an integer number of DWORDS. Technically
+     * speaking, as the hardware stands now, it is an error to send it anything not an 
+     * integer number of DWORDS in length... so we'll report an error for now and proceed. */
+    /* FIXME: update this when the hardware is fixed. */
+    if( (len & ~3) != len ) {
+        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d not multiple of 4, truncating to %d\n", driver_name, len, len & ~3);
+        len = len & ~3;
+    }
+
+    /* Copy message into buffer. */
+    memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
+
+    /* Fill out metadata. */
+    tx_dma_stream.metadata[tx_dma_stream.buf_index].length = len;
+    tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = 0; /* FIXME: needed? */
+
+    /* Set the buffer flag to full. */
+    tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
+
+    PDEBUG("nf10_ndo_start_xmit(): DMA TX operation info:\n"
+        "\tReceived msg length:\t%d\n"
+        "\tTruncated msg length:\t%d\n"
+        "\tUsing buffer number:\t%d\n",
+        skb->len, len, tx_dma_stream.buf_index);
+
+    /* Tell hardware we filled a buffer. */
+    *tx_dma_stream.doorbell = 1;
+
+    /* Update the buffer index. */
+    if(++tx_dma_stream.buf_index == DMA_CPU_BUFS)
+        tx_dma_stream.buf_index = 0;
+
+    return NETDEV_TX_OK;
+}
+
+static void nf10_ndo_tx_timeout(struct net_device *netdev)
+{
+    printk(KERN_WARNING "%s: WARNING: nf10_ndo_tx_timeout(): hit timeout!\n", driver_name);
+}
+
+static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev)
+{
+	PDEBUG("nf10_ndo_get_stats(): Getting the stats\n");	
+    
+    /* FIXME: Implement me! */
+    return NULL;
+}
+
+
 /* When the kernel finds a device with a vendor and device ID associated with this driver
  * it will invoke this function. The job of this function is really to initialize the 
  * device that the kernel has already found for us... so the name 'probe' is a bit of a
  * misnomer. */
 static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {	
-	/* OpenCPI */
-	OccpSpace 	*occp;
-	OcdpProperties	*dp0_props;
-	OcdpProperties	*dp1_props;
-	uint32_t	*sma0_props;
-	uint32_t	*sma1_props;
-	uint32_t	*bias_props;
-	OccpWorkerRegisters 
-			*dp0_regs,
-			*dp1_regs,
-			*sma0_regs,
-			*sma1_regs,
-			*bias_regs;
+    /* OpenCPI */
+    OccpSpace 	*occp;
+    OcdpProperties	*dp0_props;
+    OcdpProperties	*dp1_props;
+    uint32_t	*sma0_props;
+    uint32_t	*sma1_props;
+    uint32_t	*bias_props;
+    OccpWorkerRegisters 
+            *dp0_regs,
+            *dp1_regs,
+            *sma0_regs,
+            *sma1_regs,
+            *bias_regs;
 
-	int err;
+    int err;
 
 	PDEBUG("probe(): entering probe() with vendor_id: 0x%4x and device_id: 0x%4x\n", id->vendor, id->device);	
-	/* Enable the device. pci_enable_device() will do the following (ref. PCI/pci.txt kernel doc):
+	
+    /* Enable the device. pci_enable_device() will do the following (ref. PCI/pci.txt kernel doc):
 	 * 	- wake up the device if it was in suspended state
 	 * 	- allocate I/O and memory regions of the device (if BIOS did not)
 	 * 	- allocate an IRQ (if BIOS did not) */
@@ -721,13 +859,9 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		pci_disable_device(pdev);	
 		return err;
 	}
+    
 
-	/* Steps for tomorrow:
-	 * 	- Figure out what of all this needs to be made global variables... Should make some nice package of variables that are nicely grouped together, maybe in a struct (hopefully the stream is the only thing that we really need)... so that the rest of the code can perform all its functions.... It might be important, though, to hold onto other things like the occp variable and the rest of the properties for debugging information later on... able to be probed over generic netlink with the driver controller.
-	 * 	- Need to think about maybe how to make this a little cleaner for the future... all this code replication is not good. This function is becoming quite long...
-	 * 	- Need to move on to writing the genl command that can DMA something to the device... and the command that can check if anything is received and receive it. 
-	 * 	- Probably need to variables, one for each stream, to track where in the circle of buffers we currently are (writting to, or waiting at for more data). Could consider adding this to the stream structure?
-	 * 	- Consider the variables that are already global now, like rx/tx_dma_reg_va/pa... are they really necessary to be global? We can probably cut down on these.... we really want to sift out here what are the essentials. */	
+
 	return err;
 }
 
@@ -772,6 +906,20 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
 	return c; 
 }
 
+void nf10_netdev_init(struct net_device *netdev)
+{
+	PDEBUG("nf10_netdev_init(): Initializing nf10_netdev\n");	
+   
+    ether_setup(netdev);
+
+    netdev->netdev_ops = &nf10_netdev_ops;
+
+    netdev->watchdog_timeo = 5 * HZ;
+    
+    /* FIXME: Need to pull real MAC address from hardware. */
+    memcpy(netdev->dev_addr, "\0NET10", ETH_ALEN);
+}
+
 /* Initialization. */
 static int __init nf10_eth_driver_init(void)
 {
@@ -785,11 +933,30 @@ static int __init nf10_eth_driver_init(void)
 		return err;
 	}
 
+    /* Allocate the network interfaces. */
+    nf10_netdev = alloc_netdev(0, "nf%d", nf10_netdev_init);
+    if(nf10_netdev == NULL) {
+		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to allocate net_device\n");
+		pci_unregister_driver(&pci_driver);
+        return -ENOMEM;
+    }
+    
+    /* Register the network interfaces. */
+    err = register_netdev(nf10_netdev);
+    if(err != 0) {
+		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register net_device\n");
+		free_netdev(nf10_netdev);
+        pci_unregister_driver(&pci_driver);
+        return err;
+    }
+
 	/* Register our Generic Netlink family. */
 	err = genl_register_family(&genl_family);
 	if(err != 0) {
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): GENL family registration failed\n");
-		pci_unregister_driver(&pci_driver);
+		unregister_netdev(nf10_netdev);
+        free_netdev(nf10_netdev);
+        pci_unregister_driver(&pci_driver);
 		return err;
 	}
 
@@ -798,6 +965,8 @@ static int __init nf10_eth_driver_init(void)
 		err = genl_register_ops(&genl_family, genl_all_ops[i]);
 		if(err != 0) {
 			genl_unregister_family(&genl_family);
+		    unregister_netdev(nf10_netdev);
+            free_netdev(nf10_netdev);
 			pci_unregister_driver(&pci_driver);
 			return err;
 		}
