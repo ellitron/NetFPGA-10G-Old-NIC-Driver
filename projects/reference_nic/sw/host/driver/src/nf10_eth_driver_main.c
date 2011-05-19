@@ -484,7 +484,7 @@ static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev)
 	PDEBUG("nf10_ndo_get_stats(): Getting the stats\n");	
     
     /* FIXME: Implement me! */
-    return NULL;
+    return &nf10_netdev->stats;
 }
 
 
