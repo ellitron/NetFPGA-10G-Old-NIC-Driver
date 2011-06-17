@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/timer.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/proc_fs.h>
@@ -29,6 +30,10 @@ static int                      nf10_ndo_stop(struct net_device *netdev);
 static netdev_tx_t              nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev);
 static void                     nf10_ndo_tx_timeout(struct net_device *netdev);
 static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev);
+
+static int                      nf10_napi_struct_poll(struct napi_struct *napi, int budget);
+
+static void                     rx_poll_timer_cb(unsigned long arg);
 
 char driver_name[] = "nf10_eth_driver";
 
@@ -58,6 +63,18 @@ struct dma_stream	rx_dma_stream;	/* From device. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
 #define 	DMA_REGION_SIZE	((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * (DMA_CPU_BUFS))
+
+/* Interval at which to poll for received packets. */
+#define     RX_POLL_INTERVAL    16
+
+/* Weight used in NAPI for polling. */
+#define     RX_POLL_WEIGHT      16
+
+/* Polling timer for received packets. */
+struct timer_list rx_poll_timer = TIMER_INITIALIZER(rx_poll_timer_cb, 0, 0);
+
+/* Structure for using NAPI. */
+struct napi_struct nf10_napi_struct;
 
 /* Bundle of variables to keep track of a unidirectional DMA stream. */
 struct dma_stream {
@@ -381,6 +398,13 @@ static int nf10_ndo_open(struct net_device *netdev)
     /* Tell the kernel we're ready for transmitting packets. */
     netif_start_queue(netdev);
 
+    /* Enable NAPI. */
+    napi_enable(&nf10_napi_struct);
+    
+    /* Start the polling timer for receiving packets. */
+    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+    add_timer(&rx_poll_timer);
+
     return 0;
 }
 
@@ -390,6 +414,12 @@ static int nf10_ndo_stop(struct net_device *netdev)
 
     /* Tell the kernel we can't transmit anymore. */
     netif_stop_queue(netdev);
+
+    /* Disable NAPI. */
+    napi_disable(&nf10_napi_struct);
+
+    /* Stop the polling timer for receiving packets. */
+    del_timer(&rx_poll_timer);
 
     return 0;
 }
@@ -474,6 +504,84 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     return NETDEV_TX_OK;
 }
 
+/* Callback function for the rx_poll_timer. */
+static void rx_poll_timer_cb(unsigned long arg)
+{
+    //PDEBUG("rx_poll_timer_fn(): Timer fired\n");
+    
+    /* Check for received packets. */
+	if(rx_dma_stream.flags[rx_dma_stream.buf_index] == 1) {
+        /* Schedule a poll. */
+        napi_schedule(&nf10_napi_struct);
+    } else {
+        rx_poll_timer.expires += RX_POLL_INTERVAL;
+        add_timer(&rx_poll_timer);
+    }
+}
+
+/* Slurp up packets. */
+static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
+{
+    int n_rx = 0;
+    struct sk_buff *skb;
+    int buf_index = rx_dma_stream.buf_index;
+
+    while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
+        skb = dev_alloc_skb(rx_dma_stream.metadata[buf_index].length);
+        if(!skb) {
+            printk(KERN_NOTICE "NOTICE: nf10_ndo_poll(): packet dropped\n");
+
+            /* Mark the buffer as empty. */
+            rx_dma_stream.flags[buf_index] = 0;
+
+            /* Tell the hardware we emptied the buffer. */
+            *rx_dma_stream.doorbell = 1;
+
+            /* Update the buffer index. */
+            if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
+                rx_dma_stream.buf_index = 0;
+
+            buf_index = rx_dma_stream.buf_index;
+    
+            continue;
+        }
+
+        memcpy( skb_put(skb, rx_dma_stream.metadata[buf_index].length),
+                (void*)&rx_dma_stream.buffers[buf_index * DMA_BUF_SIZE],
+                rx_dma_stream.metadata[buf_index].length);
+        
+        skb->dev = nf10_netdev;
+        skb->protocol = eth_type_trans(skb, nf10_netdev);
+        
+        PDEBUG("nf10_napi_struct_poll(): received a packet!\n");
+
+        netif_receive_skb(skb);
+
+        /* Mark the buffer as empty. */
+        rx_dma_stream.flags[buf_index] = 0;
+
+        /* Tell the hardware we emptied the buffer. */
+        *rx_dma_stream.doorbell = 1;
+
+        /* Update the buffer index. */
+        if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
+            rx_dma_stream.buf_index = 0;
+
+        buf_index = rx_dma_stream.buf_index;       
+
+        n_rx++;
+    }	
+    
+    /* Check if we processed everything. */
+    if(rx_dma_stream.flags[buf_index] == 0) {
+        napi_complete(napi);
+        rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+        add_timer(&rx_poll_timer);
+    }
+    
+    return n_rx;
+}
+
 static void nf10_ndo_tx_timeout(struct net_device *netdev)
 {
     printk(KERN_WARNING "%s: WARNING: nf10_ndo_tx_timeout(): hit timeout!\n", driver_name);
@@ -508,7 +616,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
             *bias_regs;
 
     int err;
-
+    
 	PDEBUG("probe(): entering probe() with vendor_id: 0x%4x and device_id: 0x%4x\n", id->vendor, id->device);	
 	
     /* Enable the device. pci_enable_device() will do the following (ref. PCI/pci.txt kernel doc):
@@ -939,7 +1047,10 @@ static int __init nf10_eth_driver_init(void)
 		pci_unregister_driver(&pci_driver);
         return -ENOMEM;
     }
-    
+   
+    /* Add NAPI structure to the device. */
+    netif_napi_add(nf10_netdev, &nf10_napi_struct, nf10_napi_struct_poll, RX_POLL_WEIGHT);
+ 
     /* Register the network interfaces. */
     err = register_netdev(nf10_netdev);
     if(err != 0) {
