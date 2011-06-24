@@ -1,6 +1,6 @@
 /* FIXME: Add proper comment headers. */
 /* FIXME: Make function comment headers that of standard linux style. */
-/* FIXME: Make naming conistent (pci_driver, probe, remove vs. nf10_netdev_ops... nf10_ prefix?? */
+/* FIXME: Make naming conistent (nf10_pci_driver, probe, remove vs. nf10_netdev_ops... nf10_ prefix?? */
 /* FIXME: replace tabs with 4 spaces. */
 
 /* Documentation resources:
@@ -984,8 +984,8 @@ static void remove(struct pci_dev *pdev)
 	pci_disable_device(pdev);	
 }
 
-static struct pci_driver pci_driver = {
-	.name		= "nf10_eth_driver pci_driver",
+static struct pci_driver nf10_pci_driver = {
+	.name		= "nf10_eth_driver: pci_driver",
 	.id_table	= id_table,
 	.probe		= probe,
 	.remove		= remove,
@@ -1034,9 +1034,9 @@ static int __init nf10_eth_driver_init(void)
 	int i;	
 
 	/* Register the pci_driver. */
-	err = pci_register_driver(&pci_driver);
+	err = pci_register_driver(&nf10_pci_driver);
 	if(err != 0) {
-		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register pci_driver\n");
+		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register nf10_pci_driver\n");
 		return err;
 	}
 
@@ -1044,7 +1044,7 @@ static int __init nf10_eth_driver_init(void)
     nf10_netdev = alloc_netdev(0, "nf%d", nf10_netdev_init);
     if(nf10_netdev == NULL) {
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to allocate net_device\n");
-		pci_unregister_driver(&pci_driver);
+		pci_unregister_driver(&nf10_pci_driver);
         return -ENOMEM;
     }
    
@@ -1056,7 +1056,7 @@ static int __init nf10_eth_driver_init(void)
     if(err != 0) {
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register net_device\n");
 		free_netdev(nf10_netdev);
-        pci_unregister_driver(&pci_driver);
+        pci_unregister_driver(&nf10_pci_driver);
         return err;
     }
 
@@ -1066,7 +1066,7 @@ static int __init nf10_eth_driver_init(void)
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): GENL family registration failed\n");
 		unregister_netdev(nf10_netdev);
         free_netdev(nf10_netdev);
-        pci_unregister_driver(&pci_driver);
+        pci_unregister_driver(&nf10_pci_driver);
 		return err;
 	}
 
@@ -1077,7 +1077,7 @@ static int __init nf10_eth_driver_init(void)
 			genl_unregister_family(&genl_family);
 		    unregister_netdev(nf10_netdev);
             free_netdev(nf10_netdev);
-			pci_unregister_driver(&pci_driver);
+			pci_unregister_driver(&nf10_pci_driver);
 			return err;
 		}
 	}
@@ -1103,7 +1103,7 @@ static void __exit nf10_eth_driver_exit(void)
 
     free_netdev(nf10_netdev); 
 	
-    pci_unregister_driver(&pci_driver);
+    pci_unregister_driver(&nf10_pci_driver);
 
 	remove_proc_entry("driver/nf10_eth_driver", NULL);
 	
