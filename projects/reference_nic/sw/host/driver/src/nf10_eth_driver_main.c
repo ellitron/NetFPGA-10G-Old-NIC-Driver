@@ -57,9 +57,9 @@ struct dma_stream	tx_dma_stream;	/* To device. */
 struct dma_stream	rx_dma_stream;	/* From device. */
 
 /* DMA parameters. */
-#define		DMA_BUF_SIZE	2048	/* Size of buffer for each DMA transfer. Property of the hardware. */
-#define		DMA_FPGA_BUFS	4	/* Number of buffers on the FPGA side. Property of the hardware. */
-#define		DMA_CPU_BUFS	8	/* Number of buffers on the CPU side. */
+#define		DMA_BUF_SIZE    2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
+#define		DMA_FPGA_BUFS   4       /* Number of buffers on the FPGA side. Property of the hardware. */
+#define		DMA_CPU_BUFS    1024    /* Number of buffers on the CPU side. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
 #define 	DMA_REGION_SIZE	((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * (DMA_CPU_BUFS))
@@ -442,7 +442,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
      * temporary check */
     /* Also wondering for len... if the preamble/FCS are included. */
     if(len < ETH_ZLEN || len > ETH_FRAME_LEN) {
-        PDEBUG("nf10_ndo_start_xmit(): packet length %d out of bounds [%d, %d]\n", len, ETH_ZLEN, ETH_FRAME_LEN);
+        PDEBUG("nf10_ndo_start_xmit(): packet length %d out of bounds [%d, %d]. Sending anyway.\n", len, ETH_ZLEN, ETH_FRAME_LEN);
     }
 
     /* Check length against the DMA buffer size. */
@@ -462,6 +462,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* FIXME: Want to use netif_{stop,wake}_queue functions, except that presently we have
      * no interrupts for tx, so we don't have a proper way to call netif_wake_queue aside
      * from setting a timer and a callback. For now... just wait. */
+    /* Perhaps another solution for now would be to just drop the packet after so many tries. */
     waited = 0;
     while(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
         if(!waited)
@@ -489,7 +490,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
     PDEBUG("nf10_ndo_start_xmit(): DMA TX operation info:\n"
-        "\tReceived msg length:\t%d\n"
+        "\tMessage length:\t%d\n"
         "\tTruncated msg length:\t%d\n"
         "\tUsing buffer number:\t%d\n",
         skb->len, len, tx_dma_stream.buf_index);
@@ -500,6 +501,10 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Update the buffer index. */
     if(++tx_dma_stream.buf_index == DMA_CPU_BUFS)
         tx_dma_stream.buf_index = 0;
+
+    /* Update the statistics. */
+    netdev->stats.tx_packets++;
+    netdev->stats.tx_bytes += len;
 
     return NETDEV_TX_OK;
 }
@@ -527,9 +532,15 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     int buf_index = rx_dma_stream.buf_index;
 
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
+
+        PDEBUG("nf10_napi_struct_poll(): DMA RX operation info:\n"
+            "\tMessage length:\t%d\n"
+            "\tFrom buffer number:\t%d\n",
+            rx_dma_stream.metadata[buf_index].length, buf_index);
+
         skb = dev_alloc_skb(rx_dma_stream.metadata[buf_index].length);
         if(!skb) {
-            printk(KERN_NOTICE "NOTICE: nf10_ndo_poll(): packet dropped\n");
+            printk(KERN_NOTICE "NOTICE: nf10_napi_struct_poll(): failed to allocate skb, packet dropped\n");
 
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
@@ -542,7 +553,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
                 rx_dma_stream.buf_index = 0;
 
             buf_index = rx_dma_stream.buf_index;
-    
+   
+            /* Update statistics. */
+            nf10_netdev->stats.rx_dropped++;
+ 
             continue;
         }
 
@@ -551,6 +565,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
                 rx_dma_stream.metadata[buf_index].length);
         
         skb->dev = nf10_netdev;
+        /* FIXME: need to set ip_summed? */
         skb->protocol = eth_type_trans(skb, nf10_netdev);
         
         PDEBUG("nf10_napi_struct_poll(): received a packet!\n");
@@ -566,6 +581,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         /* Update the buffer index. */
         if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
             rx_dma_stream.buf_index = 0;
+        
+        /* Update statistics. */
+        nf10_netdev->stats.rx_packets++;
+        nf10_netdev->stats.rx_bytes += rx_dma_stream.metadata[buf_index].length;
 
         buf_index = rx_dma_stream.buf_index;       
 
@@ -706,7 +725,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Allocate TX DMA region. */
 	tx_dma_reg_va = dma_alloc_coherent(&pdev->dev, DMA_REGION_SIZE, &tx_dma_reg_pa, GFP_KERNEL);
 	if(tx_dma_reg_va == NULL) {
-		printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate TX DMA region\n");
+		printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate TX DMA region of size %lu bytes\n", DMA_REGION_SIZE);
 		iounmap(bar0_base_va);
 		pci_release_region(pdev, BAR_0);
 		pci_disable_device(pdev);	
@@ -717,7 +736,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rx_dma_reg_va = dma_alloc_coherent(&pdev->dev, DMA_REGION_SIZE, &rx_dma_reg_pa, GFP_KERNEL);
 	if(rx_dma_reg_va == NULL) {
 		/* FIXME: replace all nf10_eth_driver with driver_name string in format. */
-		printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate RX DMA region\n");
+		printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate RX DMA region of size %lu bytes\n", DMA_REGION_SIZE);
 		dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, tx_dma_reg_va, tx_dma_reg_pa);
 		iounmap(bar0_base_va);
 		pci_release_region(pdev, BAR_0);
