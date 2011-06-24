@@ -1095,11 +1095,15 @@ static void __exit nf10_eth_driver_exit(void)
 {
 	int err;
 
-	pci_unregister_driver(&pci_driver);
-
 	err = genl_unregister_family(&genl_family);
 	if(err != 0)
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_exit(): failed to unregister GENL family\n");
+
+    unregister_netdev(nf10_netdev);
+
+    free_netdev(nf10_netdev); 
+	
+    pci_unregister_driver(&pci_driver);
 
 	remove_proc_entry("driver/nf10_eth_driver", NULL);
 	
