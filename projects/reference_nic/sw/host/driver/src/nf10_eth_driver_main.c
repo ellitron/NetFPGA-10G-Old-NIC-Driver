@@ -114,12 +114,12 @@ static const struct net_device_ops nf10_netdev_ops = {
  * of the operation. Note that, for each attribute, specifying a policy is
  * optional (although highly encouraged, even when attributes are structures or
  * arrays). */
-static struct nla_policy genl_policy[NF10_GENL_A_MAX + 1] = {
+static struct nla_policy nf10_genl_policy[NF10_GENL_A_MAX + 1] = {
 	[NF10_GENL_A_MSG]	= { .type = NLA_NUL_STRING },
 };
 
 /* Define our own generic netlink family for the nf10_eth_driver. */
-static struct genl_family genl_family = {
+static struct genl_family nf10_genl_family = {
 	.id		= GENL_ID_GENERATE,		/* Tells the Generic Netlink controller to choose a channel
 							 * number for us when we register the family. This channel 
 							 * number is then placed in the 'type' field of each
@@ -171,7 +171,7 @@ int genl_cmd_echo(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 	}
 
-	msg_reply = genlmsg_put_reply(skb_reply, info, &genl_family, 0, NF10_GENL_C_ECHO);
+	msg_reply = genlmsg_put_reply(skb_reply, info, &nf10_genl_family, 0, NF10_GENL_C_ECHO);
 	if(msg_reply == NULL) {
 		printk(KERN_WARNING "nf10_eth_driver: genl_cmd_echo(): genlmsg_put_reply returned NULL\n");
 		/* FIXME: need to free data structures! */
@@ -295,7 +295,7 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 	}
 
-	msg_reply = genlmsg_put_reply(skb_reply, info, &genl_family, 0, NF10_GENL_C_DMA_RX);
+	msg_reply = genlmsg_put_reply(skb_reply, info, &nf10_genl_family, 0, NF10_GENL_C_DMA_RX);
 	if(msg_reply == NULL) {
 		printk(KERN_WARNING "%s: genl_cmd_dma_rx(): genlmsg_put_reply returned NULL\n", driver_name);
 		/* FIXME: need to free data structures! */
@@ -351,7 +351,7 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
 struct genl_ops genl_ops_echo = {
 	.cmd	= NF10_GENL_C_ECHO,
 	.flags	= 0,
-	.policy	= genl_policy,
+	.policy	= nf10_genl_policy,
 	.doit	= genl_cmd_echo,
 	.dumpit	= NULL,
 };
@@ -360,7 +360,7 @@ struct genl_ops genl_ops_echo = {
 struct genl_ops genl_ops_dma_tx = {
 	.cmd	= NF10_GENL_C_DMA_TX,
 	.flags	= 0,
-	.policy	= genl_policy,
+	.policy	= nf10_genl_policy,
 	.doit	= genl_cmd_dma_tx,
 	.dumpit	= NULL,
 };
@@ -369,7 +369,7 @@ struct genl_ops genl_ops_dma_tx = {
 struct genl_ops genl_ops_dma_rx = {
 	.cmd	= NF10_GENL_C_DMA_RX,
 	.flags	= 0,
-	.policy	= genl_policy,
+	.policy	= nf10_genl_policy,
 	.doit	= genl_cmd_dma_rx,
 	.dumpit	= NULL,
 };
@@ -1061,7 +1061,7 @@ static int __init nf10_eth_driver_init(void)
     }
 
 	/* Register our Generic Netlink family. */
-	err = genl_register_family(&genl_family);
+	err = genl_register_family(&nf10_genl_family);
 	if(err != 0) {
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): GENL family registration failed\n");
 		unregister_netdev(nf10_netdev);
@@ -1072,9 +1072,9 @@ static int __init nf10_eth_driver_init(void)
 
 	/* Register operations with our Generic Netlink family. */
 	for(i = 0; i < ARRAY_SIZE(genl_all_ops); i++) {
-		err = genl_register_ops(&genl_family, genl_all_ops[i]);
+		err = genl_register_ops(&nf10_genl_family, genl_all_ops[i]);
 		if(err != 0) {
-			genl_unregister_family(&genl_family);
+			genl_unregister_family(&nf10_genl_family);
 		    unregister_netdev(nf10_netdev);
             free_netdev(nf10_netdev);
 			pci_unregister_driver(&nf10_pci_driver);
@@ -1095,7 +1095,7 @@ static void __exit nf10_eth_driver_exit(void)
 {
 	int err;
 
-	err = genl_unregister_family(&genl_family);
+	err = genl_unregister_family(&nf10_genl_family);
 	if(err != 0)
 		printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_exit(): failed to unregister GENL family\n");
 
