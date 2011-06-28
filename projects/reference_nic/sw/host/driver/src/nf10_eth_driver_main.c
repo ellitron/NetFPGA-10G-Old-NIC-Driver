@@ -427,13 +427,26 @@ static int nf10_ndo_stop(struct net_device *netdev)
     return 0;
 }
 
+uint32_t get_iface_from_netdev(struct net_device *netdev)
+{
+    int i;
+
+    for(i = 0; i < NUM_NETDEVS; i++) {
+        if(nf10_netdevs[i] == netdev)
+            return i;
+    }
+
+    return -1;
+}
 
 static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
     void *data;
     uint32_t len;
     int waited;
-	
+	uint32_t iface;
+    uint32_t opcode;
+
     PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");	
 
     /* Get data and length. */
@@ -486,8 +499,15 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
 
     /* Fill out metadata. */
+    /* Length. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].length = len;
-    tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = 0; /* FIXME: needed? */
+    
+    /* Opcode for setting source and destination ports. */
+    opcode = 0;
+    iface = get_iface_from_netdev(netdev);
+    tx_set_src_iface(&opcode, iface);
+    tx_set_dst_iface(&opcode, iface);
+    tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = opcode;
 
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
@@ -495,8 +515,9 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     PDEBUG("nf10_ndo_start_xmit(): DMA TX operation info:\n"
         "\tMessage length:\t%d\n"
         "\tTruncated msg length:\t%d\n"
+        "\tOpcode:\t\t%d\n"
         "\tUsing buffer number:\t%d\n",
-        skb->len, len, tx_dma_stream.buf_index);
+        skb->len, len, opcode, tx_dma_stream.buf_index);
 
     /* Tell hardware we filled a buffer. */
     *tx_dma_stream.doorbell = 1;
@@ -527,20 +548,110 @@ static void rx_poll_timer_cb(unsigned long arg)
     }
 }
 
+/* Helper functions for getting and setting source and destination
+ * ports. The interpretation of opcode depends on the direction the
+ * packet is headed, therefore we need {rx,tx}x{src,dst}x{get,set}
+ * functions. */
+uint32_t rx_get_dst_iface(uint32_t opcode)
+{
+    if(opcode & OPCODE_CPU0)
+        return 0;
+    else if(opcode & OPCODE_CPU1)
+        return 1;
+    else if(opcode & OPCODE_CPU2)
+        return 2;
+    else if(opcode & OPCODE_CPU3)
+        return 3;
+    else
+        return -1;
+}
+
+uint32_t rx_get_src_iface(uint32_t opcode)
+{
+    if(opcode & OPCODE_MAC0)
+        return 0;
+    else if(opcode & OPCODE_MAC1)
+        return 1;
+    else if(opcode & OPCODE_MAC2)
+        return 2;
+    else if(opcode & OPCODE_MAC3)
+        return 3;
+    else
+        return -1;
+}
+
+void rx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface)
+{
+    *opcode &= ~OPCODE_CPU_ALL; /* Clear destination bits. */
+
+    if(dst_iface == 0)
+        *opcode |= OPCODE_CPU0;
+    else if(dst_iface == 1)
+        *opcode |= OPCODE_CPU1;
+    else if(dst_iface == 2)
+        *opcode |= OPCODE_CPU2;
+    else if(dst_iface == 3)
+        *opcode |= OPCODE_CPU3;
+}
+
+void rx_set_src_iface(uint32_t *opcode, uint32_t src_iface)
+{
+    *opcode &= ~OPCODE_MAC_ALL; /* Clear source bits. */
+
+    if(src_iface == 0)
+        *opcode |= OPCODE_MAC0;
+    else if(src_iface == 1)
+        *opcode |= OPCODE_MAC1;
+    else if(src_iface == 2)
+        *opcode |= OPCODE_MAC2;
+    else if(src_iface == 3)
+        *opcode |= OPCODE_MAC3; 
+}
+
+uint32_t tx_get_dst_iface(uint32_t opcode)
+{
+    return rx_get_src_iface(opcode);
+}
+
+uint32_t tx_get_src_iface(uint32_t opcode)
+{
+    return rx_get_dst_iface(opcode);
+}
+
+void tx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface)
+{
+    rx_set_src_iface(opcode, dst_iface);
+}
+
+void tx_set_src_iface(uint32_t *opcode, uint32_t src_iface)
+{
+    rx_set_dst_iface(opcode, src_iface);
+}
+
+
+
 /* Slurp up packets. */
 static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
 {
     int n_rx = 0;
     struct sk_buff *skb;
     int buf_index = rx_dma_stream.buf_index;
-
+    uint32_t dst_iface; /* Destination interface. */
+    
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
         PDEBUG("nf10_napi_struct_poll(): DMA RX operation info:\n"
             "\tMessage length:\t%d\n"
+            "\tMessage opCode:\t%d\n"
             "\tFrom buffer number:\t%d\n",
-            rx_dma_stream.metadata[buf_index].length, buf_index);
+            rx_dma_stream.metadata[buf_index].length, 
+            rx_dma_stream.metadata[buf_index].opCode,
+            buf_index);
 
+        dst_iface = rx_get_dst_iface(rx_dma_stream.metadata[buf_index].opCode);
+
+        /* FIXME: Do I need to allocate any more room than this? Don't
+         * think so... snull driver has a +2 here */
         skb = dev_alloc_skb(rx_dma_stream.metadata[buf_index].length);
         if(!skb) {
             printk(KERN_NOTICE "NOTICE: nf10_napi_struct_poll(): failed to allocate skb, packet dropped\n");
@@ -555,11 +666,11 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
                 rx_dma_stream.buf_index = 0;
 
-            buf_index = rx_dma_stream.buf_index;
-   
+            buf_index = rx_dma_stream.buf_index;   
+
             /* Update statistics. */
-            nf10_netdev->stats.rx_dropped++;
- 
+            nf10_netdevs[dst_iface]->stats.rx_dropped++; 
+
             continue;
         }
 
@@ -567,9 +678,9 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
                 (void*)&rx_dma_stream.buffers[buf_index * DMA_BUF_SIZE],
                 rx_dma_stream.metadata[buf_index].length);
         
-        skb->dev = nf10_netdev;
+        skb->dev = nf10_netdevs[dst_iface];
         /* FIXME: need to set ip_summed? */
-        skb->protocol = eth_type_trans(skb, nf10_netdev);
+        skb->protocol = eth_type_trans(skb, nf10_netdevs[dst_iface]);
         
         PDEBUG("nf10_napi_struct_poll(): received a packet!\n");
 
@@ -586,8 +697,8 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             rx_dma_stream.buf_index = 0;
         
         /* Update statistics. */
-        nf10_netdev->stats.rx_packets++;
-        nf10_netdev->stats.rx_bytes += rx_dma_stream.metadata[buf_index].length;
+        nf10_netdevs[dst_iface]->stats.rx_packets++;
+        nf10_netdevs[dst_iface]->stats.rx_bytes += rx_dma_stream.metadata[buf_index].length;
 
         buf_index = rx_dma_stream.buf_index;       
 

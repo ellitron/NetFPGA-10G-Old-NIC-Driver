@@ -23,6 +23,19 @@
 
 #define BAR_0	0
 
+/* Interfaces Bitmasks. */
+#define OPCODE_CPU0 0x00000002
+#define OPCODE_CPU1 0x00000008
+#define OPCODE_CPU2 0x00000020
+#define OPCODE CPU3 0x00000080
+#define OPCODE_CPU_ALL  0x000000AA
+
+#define OPCODE_MAC0 0x00000001
+#define OPCODE_MAC1 0x00000004
+#define OPCODE_MAC2 0x00000010
+#define OPCODE_MAC3 0x00000040
+#define OPCODE_MAC_ALL 0x00000055
+
 /* Attributes that can be attached to our netlink messages. */
 enum {
         NF10_GENL_A_UNSPEC,
