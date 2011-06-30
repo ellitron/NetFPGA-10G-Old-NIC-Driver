@@ -516,7 +516,6 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     opcode = 0;
     iface = get_iface_from_netdev(netdev);
     tx_set_src_iface(&opcode, iface);
-    tx_set_dst_iface(&opcode, iface);
     tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = opcode;
 
     /* Set the buffer flag to full. */
