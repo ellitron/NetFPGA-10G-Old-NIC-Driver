@@ -410,14 +410,6 @@ static int nf10_ndo_open(struct net_device *netdev)
     /* Tell the kernel we're ready for transmitting packets. */
     netif_start_queue(netdev);
 
-    /* Enable NAPI if this is nf10_netdevs[0]. */
-    if(netdev == nf10_netdevs[0])
-        napi_enable(&nf10_napi_struct);
-    
-    /* Start the polling timer for receiving packets. */
-    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
-    add_timer(&rx_poll_timer);
-
     return 0;
 }
 
@@ -427,12 +419,6 @@ static int nf10_ndo_stop(struct net_device *netdev)
 
     /* Tell the kernel we can't transmit anymore. */
     netif_stop_queue(netdev);
-
-    /* Disable NAPI. */
-    napi_disable(&nf10_napi_struct);
-
-    /* Stop the polling timer for receiving packets. */
-    del_timer(&rx_poll_timer);
 
     return 0;
 }
@@ -522,9 +508,9 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
     PDEBUG("nf10_ndo_start_xmit(): DMA TX operation info:\n"
-        "\tMessage length:\t\t\t%d\n"
+        "\tMessage length:\t\t%d\n"
         "\tTruncated msg length:\t%d\n"
-        "\tOpcode:\t\t\t\t0x%08x\n"
+        "\tOpcode:\t\t\t0x%08x\n"
         "\tUsing buffer number:\t%d\n",
         skb->len, len, opcode, tx_dma_stream.buf_index);
 
@@ -650,8 +636,8 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
         PDEBUG("nf10_napi_struct_poll(): DMA RX operation info:\n"
-            "\tMessage length:\t\t\t%d\n"
-            "\tMessage opCode:\t\t\t0x%08x\n"
+            "\tMessage length:\t\t%d\n"
+            "\tMessage opCode:\t\t0x%08x\n"
             "\tFrom buffer number:\t%d\n",
             rx_dma_stream.metadata[buf_index].length, 
             rx_dma_stream.metadata[buf_index].opCode,
@@ -1249,6 +1235,13 @@ static int __init nf10_eth_driver_init(void)
 	/* FIXME: Do we need to check for error on create_proc_read_entry? */
 	create_proc_read_entry("driver/nf10_eth_driver", 0, NULL, read_proc, NULL);
 
+    /* Enable NAPI. */
+    napi_enable(&nf10_napi_struct);
+    
+    /* Start the polling timer for receiving packets. */
+    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+    add_timer(&rx_poll_timer);
+
 	printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Loaded.\n");
 	
 	return 0;
@@ -1272,6 +1265,12 @@ static void __exit nf10_eth_driver_exit(void)
     pci_unregister_driver(&nf10_pci_driver);
 
 	remove_proc_entry("driver/nf10_eth_driver", NULL);
+
+    /* Disable NAPI. */
+    napi_disable(&nf10_napi_struct);
+
+    /* Stop the polling timer for receiving packets. */
+    del_timer(&rx_poll_timer);
 	
 	printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Unloaded.\n");
 }
