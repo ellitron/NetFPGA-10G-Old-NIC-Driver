@@ -69,12 +69,16 @@ struct dma_stream	tx_dma_stream;	/* To device. */
 struct dma_stream	rx_dma_stream;	/* From device. */
 
 /* DMA parameters. */
-#define		DMA_BUF_SIZE    2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
-#define		DMA_FPGA_BUFS   4       /* Number of buffers on the FPGA side. Property of the hardware. */
-#define		DMA_CPU_BUFS    1024    /* Number of buffers on the CPU side. */
+#define		DMA_BUF_SIZE        2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
+#define		DMA_FPGA_BUFS       4       /* Number of buffers on the FPGA side. Property of the hardware. */
+#define		DMA_CPU_BUFS        32768   /* Number of buffers on the CPU side. */
+#define     MIN_DMA_CPU_BUFS    8       /* Minimum number of buffers on the CPU side. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
 #define 	DMA_REGION_SIZE	((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * (DMA_CPU_BUFS))
+
+uint32_t dma_cpu_bufs;
+uint32_t dma_region_size;
 
 /* Interval at which to poll for received packets. */
 #define     RX_POLL_INTERVAL    16
@@ -280,7 +284,7 @@ int genl_cmd_dma_tx(struct sk_buff *skb, struct genl_info *info)
 	*tx_dma_stream.doorbell = 1;
 
 	/* Update the buffer index. */
-	if(++tx_dma_stream.buf_index == DMA_CPU_BUFS)
+	if(++tx_dma_stream.buf_index == dma_cpu_bufs)
 		tx_dma_stream.buf_index = 0;
 
 	return 0;
@@ -338,7 +342,7 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
 		*rx_dma_stream.doorbell = 1;
 
 		/* Update the buffer index. */
-		if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
+		if(++rx_dma_stream.buf_index == dma_cpu_bufs)
 			rx_dma_stream.buf_index = 0;
 	}
 	else {
@@ -514,11 +518,14 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
         "\tUsing buffer number:\t%d\n",
         skb->len, len, opcode, tx_dma_stream.buf_index);
 
+    /* Make sure all the writes have been done before ringing the doorbell. */
+    wmb();
+
     /* Tell hardware we filled a buffer. */
     *tx_dma_stream.doorbell = 1;
 
     /* Update the buffer index. */
-    if(++tx_dma_stream.buf_index == DMA_CPU_BUFS)
+    if(++tx_dma_stream.buf_index == dma_cpu_bufs)
         tx_dma_stream.buf_index = 0;
 
     /* Update the statistics. */
@@ -658,7 +665,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             *rx_dma_stream.doorbell = 1;
 
             /* Update the buffer index. */
-            if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
+            if(++rx_dma_stream.buf_index == dma_cpu_bufs)
                 rx_dma_stream.buf_index = 0;
 
             buf_index = rx_dma_stream.buf_index;   
@@ -688,7 +695,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         *rx_dma_stream.doorbell = 1;
 
         /* Update the buffer index. */
-        if(++rx_dma_stream.buf_index == DMA_CPU_BUFS)
+        if(++rx_dma_stream.buf_index == dma_cpu_bufs)
             rx_dma_stream.buf_index = 0;
         
         /* Update statistics. */
@@ -831,43 +838,56 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return err;
 	}
 
-	/* Allocate TX DMA region. */
-	tx_dma_reg_va = dma_alloc_coherent(&pdev->dev, DMA_REGION_SIZE, &tx_dma_reg_pa, GFP_KERNEL);
-	if(tx_dma_reg_va == NULL) {
-		printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate TX DMA region of size %lu bytes\n", DMA_REGION_SIZE);
-		iounmap(bar0_base_va);
-		pci_release_region(pdev, BAR_0);
-		pci_disable_device(pdev);	
-		return err;
-	}
+    for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs > MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
+        dma_region_size = ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * dma_cpu_bufs);
+        
+        /* Allocate TX DMA region. */
+        /* Using __GFP_NOWARN flag because otherwise the kernel printk warns us when 
+         * the allocation fails, which is unnecessary since we print our own msg. */
+        tx_dma_reg_va = dma_alloc_coherent(&pdev->dev, dma_region_size, &tx_dma_reg_pa, GFP_KERNEL | __GFP_NOWARN);
+        if(tx_dma_reg_va == NULL) {
+		    printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate TX DMA region of size %d bytes\n", dma_region_size);
+            /* Try smaller allocation. */
+            continue;
+	    }
 
-	/* Allocate RX DMA region. */
-	rx_dma_reg_va = dma_alloc_coherent(&pdev->dev, DMA_REGION_SIZE, &rx_dma_reg_pa, GFP_KERNEL);
-	if(rx_dma_reg_va == NULL) {
-		/* FIXME: replace all nf10_eth_driver with driver_name string in format. */
-		printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate RX DMA region of size %lu bytes\n", DMA_REGION_SIZE);
-		dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, tx_dma_reg_va, tx_dma_reg_pa);
-		iounmap(bar0_base_va);
-		pci_release_region(pdev, BAR_0);
-		pci_disable_device(pdev);	
-		return err;
-	}
+        /* Allocate RX DMA region. */
+	    rx_dma_reg_va = dma_alloc_coherent(&pdev->dev, dma_region_size, &rx_dma_reg_pa, GFP_KERNEL | __GFP_NOWARN);
+	    if(rx_dma_reg_va == NULL) {
+		    /* FIXME: replace all nf10_eth_driver with driver_name string in format. */
+		    printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate RX DMA region of size %d bytes\n", dma_region_size);
+		    dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
+            /* Try smaller allocation. */
+            continue;
+	    }
 
-	/* FIXME: Should I zero the memory? */
+        /* Both memory regions have been allocated successfully. */   
+        break;
+ 
+	    /* FIXME: Should I zero the memory? */
+    	/* FIXME: Insert a check to make sure that the memory regions really are in the lower
+	     * 32-bits of the address space. */
+    }
 
-	/* FIXME: Insert a check to make sure that the memory regions really are in the lower
-	 * 32-bits of the address space. */
-
+    /* Check that the memory allocations succeeded. */
+    if(tx_dma_reg_va == NULL || rx_dma_reg_va == NULL) {
+        printk(KERN_ERR "nf10_eth_driver: ERROR: probe(): failed to allocate DMA regions\n");
+        iounmap(bar0_base_va);
+	    pci_release_region(pdev, BAR_0);
+	    pci_disable_device(pdev);	
+	    return err;		
+    }
+    
 	PDEBUG("probe(): successfully allocated the TX and RX DMA regions:\n"
 		"\tTX Region: Virtual address:\t0x%016llx\n"
 		"\tTX Region: Physical address:\t0x%016llx\n"
-		"\tTX Region Size:\t\t\t%lu\n"
+		"\tTX Region Size:\t\t\t%d\n"
 		"\tRX Region: Virtual address:\t0x%016llx\n"
 		"\tRX Region: Physical address:\t0x%016llx\n"
-		"\tRX Region Size:\t\t\t%lu\n",
+		"\tRX Region Size:\t\t\t%d\n",
 		/* FIXME: typcasting might throw warnings on 32-bit systems... */
-		(uint64_t)tx_dma_reg_va, (uint64_t)tx_dma_reg_pa, DMA_REGION_SIZE,
-		(uint64_t)rx_dma_reg_va, (uint64_t)rx_dma_reg_pa, DMA_REGION_SIZE);
+		(uint64_t)tx_dma_reg_va, (uint64_t)tx_dma_reg_pa, dma_region_size,
+		(uint64_t)rx_dma_reg_va, (uint64_t)rx_dma_reg_pa, dma_region_size);
 
 	/* Now we begin to structure the BAR0 MMIO region as the set of control and status
 	 * registers that it is. Once we setup this structure, then we proceed to reset,
@@ -939,8 +959,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 	
 	if(err) {
-		dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, rx_dma_reg_va, rx_dma_reg_pa);
-		dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, tx_dma_reg_va, tx_dma_reg_pa);
+		dma_free_coherent(&pdev->dev, dma_region_size, rx_dma_reg_va, rx_dma_reg_pa);
+		dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
 		iounmap(bar0_base_va);
 		pci_release_region(pdev, BAR_0);
 		pci_disable_device(pdev);	
@@ -956,46 +976,46 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	*sma1_props = 2;
 
 	tx_dma_stream.buffers	= (uint8_t *)tx_dma_reg_va;
-	tx_dma_stream.metadata	= (OcdpMetadata *)(tx_dma_stream.buffers + DMA_CPU_BUFS * DMA_BUF_SIZE);
-	tx_dma_stream.flags	= (uint32_t *)(tx_dma_stream.metadata + DMA_CPU_BUFS);
+	tx_dma_stream.metadata	= (OcdpMetadata *)(tx_dma_stream.buffers + dma_cpu_bufs * DMA_BUF_SIZE);
+	tx_dma_stream.flags	= (uint32_t *)(tx_dma_stream.metadata + dma_cpu_bufs);
 	tx_dma_stream.doorbell	= &dp0_props->nRemoteDone; 
 	tx_dma_stream.buf_index	= 0;
-	memset((void*)tx_dma_stream.flags, 1, DMA_CPU_BUFS * sizeof(uint32_t));
+	memset((void*)tx_dma_stream.flags, 1, dma_cpu_bufs * sizeof(uint32_t));
 
 	dp0_props->nLocalBuffers 	= DMA_FPGA_BUFS;
-	dp0_props->nRemoteBuffers 	= DMA_CPU_BUFS;
+	dp0_props->nRemoteBuffers 	= dma_cpu_bufs;
 	dp0_props->localBufferBase 	= 0;
 	dp0_props->localMetadataBase 	= DMA_FPGA_BUFS * DMA_BUF_SIZE;
 	dp0_props->localBufferSize 	= DMA_BUF_SIZE;
 	dp0_props->localMetadataSize 	= sizeof(OcdpMetadata);
 	dp0_props->memoryBytes		= 32*1024; /* FIXME: What is this?? */
 	dp0_props->remoteBufferBase	= (uint32_t)tx_dma_reg_pa;
-	dp0_props->remoteMetadataBase	= (uint32_t)tx_dma_reg_pa + DMA_CPU_BUFS * DMA_BUF_SIZE;
+	dp0_props->remoteMetadataBase	= (uint32_t)tx_dma_reg_pa + dma_cpu_bufs * DMA_BUF_SIZE;
 	dp0_props->remoteBufferSize	= DMA_BUF_SIZE;
 	dp0_props->remoteMetadataSize	= sizeof(OcdpMetadata);
-	dp0_props->remoteFlagBase	= (uint32_t)tx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * DMA_CPU_BUFS;
+	dp0_props->remoteFlagBase	= (uint32_t)tx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * dma_cpu_bufs;
 	dp0_props->remoteFlagPitch	= sizeof(uint32_t);
 	dp0_props->control		= OCDP_CONTROL(OCDP_CONTROL_CONSUMER, OCDP_ACTIVE_MESSAGE);
 
 	rx_dma_stream.buffers	= (uint8_t *)rx_dma_reg_va;
-	rx_dma_stream.metadata	= (OcdpMetadata *)(rx_dma_stream.buffers + DMA_CPU_BUFS * DMA_BUF_SIZE);
-	rx_dma_stream.flags	= (uint32_t *)(rx_dma_stream.metadata + DMA_CPU_BUFS);
+	rx_dma_stream.metadata	= (OcdpMetadata *)(rx_dma_stream.buffers + dma_cpu_bufs * DMA_BUF_SIZE);
+	rx_dma_stream.flags	= (uint32_t *)(rx_dma_stream.metadata + dma_cpu_bufs);
 	rx_dma_stream.doorbell	= &dp1_props->nRemoteDone; 
 	rx_dma_stream.buf_index	= 0;
-	memset((void*)rx_dma_stream.flags, 0, DMA_CPU_BUFS * sizeof(uint32_t));
+	memset((void*)rx_dma_stream.flags, 0, dma_cpu_bufs * sizeof(uint32_t));
 
 	dp1_props->nLocalBuffers 	= DMA_FPGA_BUFS;
-	dp1_props->nRemoteBuffers 	= DMA_CPU_BUFS;
+	dp1_props->nRemoteBuffers 	= dma_cpu_bufs;
 	dp1_props->localBufferBase 	= 0;
 	dp1_props->localMetadataBase 	= DMA_FPGA_BUFS * DMA_BUF_SIZE;
 	dp1_props->localBufferSize 	= DMA_BUF_SIZE;
 	dp1_props->localMetadataSize 	= sizeof(OcdpMetadata);
 	dp1_props->memoryBytes		= 32*1024; /* FIXME: What is this?? */
 	dp1_props->remoteBufferBase	= (uint32_t)rx_dma_reg_pa;
-	dp1_props->remoteMetadataBase	= (uint32_t)rx_dma_reg_pa + DMA_CPU_BUFS * DMA_BUF_SIZE;
+	dp1_props->remoteMetadataBase	= (uint32_t)rx_dma_reg_pa + dma_cpu_bufs * DMA_BUF_SIZE;
 	dp1_props->remoteBufferSize	= DMA_BUF_SIZE;
 	dp1_props->remoteMetadataSize	= sizeof(OcdpMetadata);
-	dp1_props->remoteFlagBase	= (uint32_t)rx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * DMA_CPU_BUFS;
+	dp1_props->remoteFlagBase	= (uint32_t)rx_dma_reg_pa + (DMA_BUF_SIZE + sizeof(OcdpMetadata)) * dma_cpu_bufs;
 	dp1_props->remoteFlagPitch	= sizeof(uint32_t);
 	dp1_props->control		= OCDP_CONTROL(OCDP_CONTROL_PRODUCER, OCDP_ACTIVE_MESSAGE);
 	
@@ -1087,8 +1107,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 	
 	if(err) {
-		dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, rx_dma_reg_va, rx_dma_reg_pa);
-		dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, tx_dma_reg_va, tx_dma_reg_pa);
+		dma_free_coherent(&pdev->dev, dma_region_size, rx_dma_reg_va, rx_dma_reg_pa);
+		dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
 		iounmap(bar0_base_va);
 		pci_release_region(pdev, BAR_0);
 		pci_disable_device(pdev);	
@@ -1105,8 +1125,8 @@ static void remove(struct pci_dev *pdev)
 {
 	PDEBUG("remove(): entering remove()\n");
 	
-	dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, rx_dma_reg_va, rx_dma_reg_pa);
-	dma_free_coherent(&pdev->dev, DMA_REGION_SIZE, tx_dma_reg_va, tx_dma_reg_pa);
+	dma_free_coherent(&pdev->dev, dma_region_size, rx_dma_reg_va, rx_dma_reg_pa);
+	dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
 	iounmap(bar0_base_va);
 	pci_release_region(pdev, BAR_0);
 	pci_disable_device(pdev);	
@@ -1128,12 +1148,12 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
 	c = sprintf(buf, "NetFPGA-10G Ethernet Driver\n-----------------------------\n");
 	c += sprintf(&buf[c], "TX Flags:\n");	
 
-	for(i=0; i<DMA_CPU_BUFS; i++)
+	for(i=0; i<dma_cpu_bufs; i++)
 		c += sprintf(&buf[c], "\t%d:\t0x%08x\n", i, tx_dma_stream.flags[i]);
 
 	c += sprintf(&buf[c], "RX Flags:\n");
 	
-	for(i=0; i<DMA_CPU_BUFS; i++)
+	for(i=0; i<dma_cpu_bufs; i++)
 		c += sprintf(&buf[c], "\t%d:\t0x%08x\n", i, rx_dma_stream.flags[i]);	
 
 	*eof = 1;
