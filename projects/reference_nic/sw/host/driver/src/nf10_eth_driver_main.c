@@ -1,4 +1,14 @@
-/* FIXME: Add proper comment headers. */
+/* NetFPGA-10G http://www.netfpga.org
+ * 
+ * NetFPGA-10G Reference NIC Ethernet Driver
+ * 
+ * Revision history:
+ *  2011/07/05 Jonathan Ellithorpe: "Let there be driver,"
+ *                                  and there was driver,
+ *                                  and it was good, for it separated 
+ *                                  the hardware from the software.
+ */
+
 /* FIXME: Make function comment headers that of standard linux style. */
 /* FIXME: Make naming conistent (nf10_pci_driver, probe, remove vs. nf10_netdev_ops... nf10_ prefix?? */
 /* FIXME: replace tabs with 4 spaces. */
