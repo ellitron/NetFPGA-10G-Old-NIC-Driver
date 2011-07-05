@@ -44,14 +44,14 @@ static int                      nf10_napi_struct_poll(struct napi_struct *napi, 
 
 static void                     rx_poll_timer_cb(unsigned long arg);
 
-uint32_t rx_get_dst_iface(uint32_t opcode);
-uint32_t rx_get_src_iface(uint32_t opcode);
-void rx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
-void rx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
-uint32_t tx_get_dst_iface(uint32_t opcode);
-uint32_t tx_get_src_iface(uint32_t opcode);
-void tx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
-void tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
+uint32_t    rx_get_dst_iface(uint32_t opcode);
+uint32_t    rx_get_src_iface(uint32_t opcode);
+void        rx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
+void        rx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
+uint32_t    tx_get_dst_iface(uint32_t opcode);
+uint32_t    tx_get_src_iface(uint32_t opcode);
+void        tx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
+void        tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
 
 char driver_name[] = "nf10_eth_driver";
 
@@ -64,27 +64,27 @@ struct net_device *nf10_netdevs[NUM_NETDEVS];
 /* MMIO */
 /* Like the DMA variables, probe() and remove() both use bar0_base_va, so need
  * to make global. FIXME: explore more elegant way of doing this. */
-void __iomem     *bar0_base_va;
+void __iomem    *bar0_base_va;
 unsigned int    bar0_size;
 
 /* DMA */
 /* *_dma_reg_* need these to be global for now since probe() and remobe() both use them.
  * FIXME: possible that we can do something more elegant. */
-void             *tx_dma_reg_va;    /* TX DMA region kernel virtual address. */
-dma_addr_t        tx_dma_reg_pa;    /* TX DMA region physical address. */
-void            *rx_dma_reg_va;    /* RX DMA region kernel virtual address. */
-dma_addr_t        rx_dma_reg_pa;    /* RX DMA region physical address. */
-struct dma_stream    tx_dma_stream;    /* To device. */
-struct dma_stream    rx_dma_stream;    /* From device. */
+void                *tx_dma_reg_va; /* TX DMA region kernel virtual address. */
+dma_addr_t          tx_dma_reg_pa;  /* TX DMA region physical address. */
+void                *rx_dma_reg_va; /* RX DMA region kernel virtual address. */
+dma_addr_t          rx_dma_reg_pa;  /* RX DMA region physical address. */
+struct dma_stream   tx_dma_stream;  /* To device. */
+struct dma_stream   rx_dma_stream;  /* From device. */
 
 /* DMA parameters. */
-#define        DMA_BUF_SIZE        2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
-#define        DMA_FPGA_BUFS       4       /* Number of buffers on the FPGA side. Property of the hardware. */
-#define        DMA_CPU_BUFS        32768   /* Number of buffers on the CPU side. */
+#define     DMA_BUF_SIZE        2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
+#define     DMA_FPGA_BUFS       4       /* Number of buffers on the FPGA side. Property of the hardware. */
+#define     DMA_CPU_BUFS        32768   /* Number of buffers on the CPU side. */
 #define     MIN_DMA_CPU_BUFS    8       /* Minimum number of buffers on the CPU side. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
-#define     DMA_REGION_SIZE    ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * (DMA_CPU_BUFS))
+#define     DMA_REGION_SIZE     ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * (DMA_CPU_BUFS))
 
 uint32_t dma_cpu_bufs;
 uint32_t dma_region_size;
@@ -119,11 +119,11 @@ static const struct net_device_ops nf10_netdev_ops = {
 };
 
 /* OpenCPI */
-#define WORKER_DP0    13
-#define WORKER_DP1    14
-#define WORKER_SMA0    2
-#define WORKER_BIAS    3
-#define WORKER_SMA1    4
+#define WORKER_DP0      13
+#define WORKER_DP1      14
+#define WORKER_SMA0     2
+#define WORKER_BIAS     3
+#define WORKER_SMA1     4
 
 /* FIXME: ought to think about this some more... what does timeout actually mean? */
 #define OCCP_LOG_TIMEOUT    4
@@ -145,16 +145,16 @@ static struct nla_policy nf10_genl_policy[NF10_GENL_A_MAX + 1] = {
 
 /* Define our own generic netlink family for the nf10_eth_driver. */
 static struct genl_family nf10_genl_family = {
-    .id        = GENL_ID_GENERATE,        /* Tells the Generic Netlink controller to choose a channel
-                             * number for us when we register the family. This channel 
-                             * number is then placed in the 'type' field of each
-                             * packet's nlmsghdr. */
-    .hdrsize    = 0,                /* Using 0 because there's no family specific header. */
-    .name        = NF10_GENL_FAMILY_NAME,    /* User-space applications use this name to identify this
-                             * channel. The generic netlink controller forms a mapping
-                             * between this name and the channel number (ID). */
+    .id         = GENL_ID_GENERATE,         /* Tells the Generic Netlink controller to choose a channel
+                                             * number for us when we register the family. This channel 
+                                             * number is then placed in the 'type' field of each
+                                             * packet's nlmsghdr. */
+    .hdrsize    = 0,                        /* Using 0 because there's no family specific header. */
+    .name       = NF10_GENL_FAMILY_NAME,    /* User-space applications use this name to identify this
+                                             * channel. The generic netlink controller forms a mapping
+                                             * between this name and the channel number (ID). */
     .version    = NF10_GENL_FAMILY_VERSION,
-    .maxattr    = NF10_GENL_A_MAX,        /* Maximum number of attributes this family supports. */
+    .maxattr    = NF10_GENL_A_MAX,          /* Maximum number of attributes this family supports. */
 };
 
 /* Functions of operations defined for our Generic Netlink family... */
