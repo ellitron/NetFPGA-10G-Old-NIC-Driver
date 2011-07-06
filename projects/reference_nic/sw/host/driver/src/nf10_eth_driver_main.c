@@ -438,7 +438,7 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     }
 
     PDEBUG("genl_cmd_reg_rd(): Register read operation info:\n"
-        "\tReceived address:\t0x%08x\n"
+        "\tRegister address:\t0x%08x\n"
         "\tRegister value:\t\t0x%08x\n",
         reg_addr, reg_val);    
 
