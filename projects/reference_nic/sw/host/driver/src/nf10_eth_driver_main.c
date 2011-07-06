@@ -367,6 +367,138 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
     return 0;
 }
 
+/* Register read command.
+ * Application sends us an address to read and we send back the value at that address. */
+int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
+{
+    struct nlattr   *na;    
+    struct sk_buff  *skb_reply;
+    void            *msg_reply;
+    int             err;
+    uint32_t        reg_addr;
+    uint32_t        reg_val;
+
+    /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
+     * the right data structures have actually been initialized and so on... */ 
+    
+    if(info == NULL) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): info arg is NULL\n", driver_name);
+        return -EINVAL;
+    }
+
+    /* Prepare a reply. */
+    skb_reply = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+    if(skb_reply == NULL) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): couldn't allocate the reply skb\n", driver_name);
+        return -ENOMEM;
+    }
+
+    msg_reply = genlmsg_put_reply(skb_reply, info, &nf10_genl_family, 0, NF10_GENL_C_REG_RD);
+    if(msg_reply == NULL) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): genlmsg_put_reply returned NULL\n", driver_name);
+        /* FIXME: need to free data structures! */
+        return 0; /* FIXME: What's the proper error code for this? */
+    }
+    
+    /* Get the address to read. */
+    na = info->attrs[NF10_GENL_A_ADDR32];
+    if(na) {
+        if(nla_data(na) == NULL) {
+            printk(KERN_WARNING "%s: genl_cmd_reg_rd(): msg attribute has no data\n", driver_name);
+            return 0;
+        }
+    } 
+    else {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): no attributes in message\n", driver_name);
+        return 0;
+    }
+
+    reg_addr = *(uint32_t*)nla_data(na);
+
+    /* FIXME: Get the reg value here. */
+    reg_val = 42;
+
+    /* Put the reg value in the reply. */
+    err = nla_put_u32(  skb_reply, 
+                        NF10_GENL_A_REGVAL32, 
+                        reg_val);
+    if(err != 0) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): couldn't add register value to generic netlink msg\n", driver_name);
+            /* FIXME: We need to free the allocated data structures! */
+        return err;
+    }
+
+    genlmsg_end(skb_reply, msg_reply);
+
+    err = genlmsg_reply(skb_reply, info);
+    if(err != 0) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): couldn't send back reply\n", driver_name);
+        /* FIXME: do we need to free allocated data structures here? */
+        return err;
+    }
+
+    PDEBUG("genl_cmd_reg_rd(): Register read operation info:\n"
+        "\tReceived address:\t0x%08x\n"
+        "\tRegister value:\t\t0x%08x\n",
+        reg_addr, reg_val);    
+
+    return 0;
+}
+
+/* Register write command.
+ * Application sends us an address and data to write. */
+int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
+{
+    struct nlattr   *na_addr, *na_val;    
+    uint32_t        reg_addr, reg_val;
+
+    /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
+     * the right data structures have actually been initialized and so on... */ 
+    
+    if(info == NULL) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): info arg is NULL\n", driver_name);
+        return -EINVAL;
+    }
+    
+    /* Receive the address to write to. */
+    na_addr = info->attrs[NF10_GENL_A_ADDR32];
+    if(na_addr) {
+        if(nla_data(na_addr) == NULL) {
+            printk(KERN_WARNING "%s: genl_cmd_reg_wr(): msg attribute ADDR32 has no data\n", driver_name);
+            return 0;
+        }
+    } 
+    else {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no address attribute in message\n", driver_name);
+        return 0;
+    }
+
+    /* Receive the value to write. */
+    na_val = info->attrs[NF10_GENL_A_REGVAL32];
+    if(na_val) {
+        if(nla_data(na_val) == NULL) {
+            printk(KERN_WARNING "%s: genl_cmd_reg_wr(): msg attribute REGVAL32 has no data\n", driver_name);
+            return 0;
+        }
+    }
+    else {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no register value attribute in message\n", driver_name);
+        return 0;
+    }
+
+    reg_addr = *(uint32_t*)nla_data(na_addr);
+    reg_val = *(uint32_t*)nla_data(na_val);
+
+    PDEBUG("genl_cmd_reg_wr(): Register write operation info:\n"
+        "\tRegister address:\t0x%08x\n"
+        "\tRegister value:\t\t0x%08x\n",
+        reg_addr, reg_val);    
+
+    /* FIXME: fill in the code here to do the write. */
+
+    return 0;
+}
+
 /* Operations defined for our Generic Netlink family... */
 
 /* Echo operation genl structure. */
@@ -396,10 +528,30 @@ struct genl_ops genl_ops_dma_rx = {
     .dumpit    = NULL,
 };
 
+/* Register read operation genl structure. */
+struct genl_ops genl_ops_reg_rd = {
+    .cmd        = NF10_GENL_C_REG_RD,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_reg_rd,
+    .dumpit     = NULL,
+};
+
+/* Register write operation genl structure. */
+struct genl_ops genl_ops_reg_wr = {
+    .cmd        = NF10_GENL_C_REG_WR,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_reg_wr,
+    .dumpit     = NULL,
+};
+
 static struct genl_ops *genl_all_ops[] = {
     &genl_ops_echo,
     &genl_ops_dma_tx,
     &genl_ops_dma_rx,
+    &genl_ops_reg_rd,
+    &genl_ops_reg_wr,
 };
 
 /* These are the IDs of the PCI devices that this Ethernet driver supports. */

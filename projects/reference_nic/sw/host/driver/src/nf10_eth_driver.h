@@ -4,24 +4,24 @@
 /* Useful debug print macro. Turned on/off with DRIVER_DEBUG macro fed to gcc. */
 #undef PDEBUG
 #ifdef DRIVER_DEBUG
-#	ifdef __KERNEL__
-#		define PDEBUG(fmt, args...) printk(KERN_DEBUG "nf10_eth_driver: DEBUG: " fmt, ## args)
-#	else
-#		define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
-#	endif
+#    ifdef __KERNEL__
+#        define PDEBUG(fmt, args...) printk(KERN_DEBUG "nf10_eth_driver: DEBUG: " fmt, ## args)
+#    else
+#        define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
+#    endif
 #else
-#	define PDEBUG(fmt, args...)
+#    define PDEBUG(fmt, args...)
 #endif
 
 /* PCI device IDs for the NetFPGA-10G platform and related designs. */
-#define PCI_VENDOR_ID_NF10		0x10ee	/* Vendor ID used for all NetFPGA-10G designs. */
-#define PCI_DEVICE_ID_NF10_REF_NIC	0x4243	/* Device ID used for the NetFPGA-10G reference NIC design. */
+#define PCI_VENDOR_ID_NF10        0x10ee    /* Vendor ID used for all NetFPGA-10G designs. */
+#define PCI_DEVICE_ID_NF10_REF_NIC    0x4243    /* Device ID used for the NetFPGA-10G reference NIC design. */
 
 /* NF10's Generic Netlink family settings. */
 #define NF10_GENL_FAMILY_NAME           "NF10_ETH_DRIVER"
 #define NF10_GENL_FAMILY_VERSION        1
 
-#define BAR_0	0
+#define BAR_0    0
 
 /* Interfaces Bitmasks. */
 #define OPCODE_CPU0 0x00000002
@@ -40,7 +40,9 @@
 enum {
         NF10_GENL_A_UNSPEC,
         NF10_GENL_A_MSG,
-	NF10_GENL_A_DMA_BUF,	
+        NF10_GENL_A_DMA_BUF,
+        NF10_GENL_A_ADDR32,    
+        NF10_GENL_A_REGVAL32,
 
         __NF10_GENL_A_MAX,
 };
@@ -51,8 +53,10 @@ enum {
 enum {
         NF10_GENL_C_UNSPEC,
         NF10_GENL_C_ECHO,
-	NF10_GENL_C_DMA_TX,
-	NF10_GENL_C_DMA_RX,
+        NF10_GENL_C_DMA_TX,
+        NF10_GENL_C_DMA_RX,
+        NF10_GENL_C_REG_RD,
+        NF10_GENL_C_REG_WR,
 
         __NF10_GENL_C_MAX,
 };
