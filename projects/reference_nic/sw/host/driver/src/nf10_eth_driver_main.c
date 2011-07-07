@@ -545,11 +545,11 @@ int genl_cmd_napi_enable(struct sk_buff *skb, struct genl_info *info)
  * Application sends us this command to disable NAPI polling for RX packets. */
 int genl_cmd_napi_disable(struct sk_buff *skb, struct genl_info *info)
 {
-    /* Disable NAPI. */
-    napi_disable(&nf10_napi_struct);
-
     /* Stop the polling timer for receiving packets. */
     del_timer(&rx_poll_timer); 
+
+    /* Disable NAPI. */
+    napi_disable(&nf10_napi_struct);
 
     PDEBUG("genl_cmd_napi_disable(): NAPI polling disabled\n");    
 
@@ -1535,11 +1535,11 @@ static void __exit nf10_eth_driver_exit(void)
 
     remove_proc_entry("driver/nf10_eth_driver", NULL);
 
-    /* Disable NAPI. */
-    napi_disable(&nf10_napi_struct);
-
     /* Stop the polling timer for receiving packets. */
     del_timer(&rx_poll_timer);
+
+    /* Disable NAPI. */
+    napi_disable(&nf10_napi_struct);
     
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Unloaded.\n");
 }
