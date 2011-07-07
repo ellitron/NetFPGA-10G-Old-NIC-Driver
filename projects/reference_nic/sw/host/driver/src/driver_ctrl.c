@@ -282,23 +282,21 @@ static void do_dma_tx(int argc, char *argv[])
 static int do_dma_rx_recv_msg_cb(struct nl_msg *msg, void *arg)
 {
     struct nlmsghdr *nlh;
-    struct nlattr    *na;
+    struct nlattr    *na_msg, *na_opcode;
     struct nlattr *attrs[NF10_GENL_A_MAX + 1];
 
     nlh = nlmsg_hdr(msg);
 
     genlmsg_parse(nlh, 0, attrs, NF10_GENL_A_MAX, 0);
 
-    na = attrs[NF10_GENL_A_DMA_BUF];
-    if(na) {
-        if(nla_data(na) == NULL) {
-            printf("ERROR: do_dma_rx_recv_msg_cb(): NF10_GENL_A_DMA_BUF attribute has NULL data\n");
-            return 0;
-        }
+    na_msg = attrs[NF10_GENL_A_DMA_BUF];
+    if(na_msg && nla_data(na_msg)) {
+        printf("msg:\t%s\n", nla_data(na_msg));
+        printf("len:\t%d\n", nla_len(na_msg));
 
-        /* Cheating a bit... */
-        //nl_msg_dump(msg, stdout);
-        printf("%s\n", nla_data(na));
+        na_opcode = attrs[NF10_GENL_A_OPCODE];
+        if(na_opcode && nla_data(na_opcode))
+            printf("opcode:\t0x%08x\n", *(uint32_t*)nla_data(na_opcode)); 
     }
     else {
         printf("Didn't find any data to receive\n");

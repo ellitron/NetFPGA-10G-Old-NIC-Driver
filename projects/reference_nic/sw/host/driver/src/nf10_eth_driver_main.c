@@ -338,12 +338,23 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
 
     /* Check if buffer has something for us. */
     if(rx_dma_stream.flags[rx_dma_stream.buf_index] == 1) {
-        err = nla_put(    skb_reply, 
-                NF10_GENL_A_DMA_BUF, 
-                rx_dma_stream.metadata[rx_dma_stream.buf_index].length, 
-                (void*)&rx_dma_stream.buffers[rx_dma_stream.buf_index * DMA_BUF_SIZE]);
+        /* Add DMA buffer attribute. */
+        err = nla_put(  skb_reply, 
+                        NF10_GENL_A_DMA_BUF, 
+                        rx_dma_stream.metadata[rx_dma_stream.buf_index].length, 
+                        (void*)&rx_dma_stream.buffers[rx_dma_stream.buf_index * DMA_BUF_SIZE]);
         if(err != 0) {
-            printk(KERN_WARNING "%s: genl_cmd_dma_rx(): couldn't add DMA buffer to generic netlink msg\n", driver_name);
+            printk(KERN_WARNING "%s: genl_cmd_dma_rx(): couldn't add DMA buffer attribute to generic netlink msg\n", driver_name);
+            /* FIXME: We need to free the allocated data structures! */
+            return err;
+        }
+
+        /* Add opcode attribute. */
+        err = nla_put_u32(  skb_reply,
+                            NF10_GENL_A_OPCODE,
+                            rx_dma_stream.metadata[rx_dma_stream.buf_index].opCode);
+        if(err != 0) {
+            printk(KERN_WARNING "%s: genl_cmd_dma_rx(): couldn't add opcode attribute to generic netlink msg\n", driver_name);
             /* FIXME: We need to free the allocated data structures! */
             return err;
         }
@@ -353,8 +364,11 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
     
         PDEBUG("genl_cmd_dma_rx(): DMA RX operation info:\n"
             "\tBytes of data received:\t%d\n"
+            "\tOpcode received:\t\t0x%08x\n"
             "\tFrom buffer number:\t%d\n",
-            rx_dma_stream.metadata[rx_dma_stream.buf_index].length, rx_dma_stream.buf_index);    
+            rx_dma_stream.metadata[rx_dma_stream.buf_index].length, 
+            rx_dma_stream.metadata[rx_dma_stream.buf_index].opCode,
+            rx_dma_stream.buf_index);    
 
         /* Tell the hardware we emptied the buffer. */
         *rx_dma_stream.doorbell = 1;
