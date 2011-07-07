@@ -11,7 +11,6 @@
  *  documentation.
  *
  * Notes:
- *  
  *  This library makes use of the libnl-3.0 library for generic netlink
  *  functions. You must install this library into your system before
  *  compiling (http://www.infradead.org/~tgr/libnl/).
