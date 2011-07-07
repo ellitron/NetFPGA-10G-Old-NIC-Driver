@@ -1,4 +1,4 @@
-obj-m			:= nf10_eth_driver.o
+obj-m					:= nf10_eth_driver.o
 nf10_eth_driver-objs	:= nf10_eth_driver_main.o
 
 ifeq ($(DRIVER_DEBUG),y)
@@ -16,7 +16,6 @@ all:	nf10_eth_driver driver_ctrl nf10_reg_lib
 nf10_eth_driver:
 	$(MAKE) -C /lib/modules/$(KVERSION)/build SUBDIRS=$(shell pwd) modules
 
-# FIXME: need to make this smarter / little more professional looking...
 driver_ctrl:
 	gcc driver_ctrl.c -lnl -lnl-genl -o driver_ctrl
 

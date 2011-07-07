@@ -3,7 +3,7 @@
  * NetFPGA-10G Register Access Library
  *
  * Description: 
- *  A library of functions for reading and writing register in the
+ *  A library of functions for reading and writing registers in the
  *  hardware. These functions read and write registers by invoking
  *  register access functions in the linux driver over a generic netlink
  *  interface. Therefore, the driver must be loaded in the kernel for
@@ -35,6 +35,8 @@
 
 /* NF10 specific generic netlink definitions  */
 #include "nf10_genl.h"
+
+#include "nf10_reg_lib.h"
 
 static int  driver_connect(void);
 static void driver_disconnect(void);
