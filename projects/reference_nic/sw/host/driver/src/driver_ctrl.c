@@ -460,11 +460,103 @@ static void do_reg_wr(int argc, char *argv[])
     driver_disconnect();
 }
 
+static int do_napi_enable_recv_ack_cb(struct nl_msg *msg, void *arg)
+{
+    return 0;
+}
+
+static void do_napi_enable(int argc, char *argv[])
+{
+    struct nl_msg   *msg;
+    int err;    
+
+    err = driver_connect();
+    if(err != 0) {
+        printf("ERROR: do_napi_enable(): failed to connect to the driver\n");
+        return;
+    }
+
+    msg = nlmsg_alloc();
+    if(msg == NULL) {
+        printf("ERROR: do_napi_enable(): could not allocate new netlink message\n");
+        driver_disconnect();
+        return;
+    }
+
+    /* genlmsg_put will fill in the fields of the nlmsghdr and the genlmsghdr. */
+    genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, nf10_genl_family, 0, 0,
+            NF10_GENL_C_NAPI_ENABLE, NF10_GENL_FAMILY_VERSION);
+
+    /* nl_send_auto will automatically fill in the PID and the sequence number,
+     * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
+     * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
+    nl_send_auto(nf10_genl_sock, msg);
+
+    nlmsg_free(msg);
+
+    nl_socket_modify_cb(nf10_genl_sock, NL_CB_ACK, NL_CB_CUSTOM, do_napi_enable_recv_ack_cb, NULL);
+
+    /* FIXME: this function will return even if there's no ACK in the buffer. I.E. it doesn't
+     * seem to wait for the ACK to be received... Ideally we'd have the behavior that getting an 
+     * ACK tells us everything is OK, otherwise we time out on waiting for an ACK and tell this
+     * to the user. */
+    nl_recvmsgs_default(nf10_genl_sock);
+
+    driver_disconnect();
+}
+
+static int do_napi_disable_recv_ack_cb(struct nl_msg *msg, void *arg)
+{
+    return 0;
+}
+
+static void do_napi_disable(int argc, char *argv[])
+{
+    struct nl_msg   *msg;
+    int err;    
+
+    err = driver_connect();
+    if(err != 0) {
+        printf("ERROR: do_napi_disable(): failed to connect to the driver\n");
+        return;
+    }
+
+    msg = nlmsg_alloc();
+    if(msg == NULL) {
+        printf("ERROR: do_napi_disable(): could not allocate new netlink message\n");
+        driver_disconnect();
+        return;
+    }
+
+    /* genlmsg_put will fill in the fields of the nlmsghdr and the genlmsghdr. */
+    genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, nf10_genl_family, 0, 0,
+            NF10_GENL_C_NAPI_DISABLE, NF10_GENL_FAMILY_VERSION);
+
+    /* nl_send_auto will automatically fill in the PID and the sequence number,
+     * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
+     * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
+    nl_send_auto(nf10_genl_sock, msg);
+
+    nlmsg_free(msg);
+
+    nl_socket_modify_cb(nf10_genl_sock, NL_CB_ACK, NL_CB_CUSTOM, do_napi_disable_recv_ack_cb, NULL);
+
+    /* FIXME: this function will return even if there's no ACK in the buffer. I.E. it doesn't
+     * seem to wait for the ACK to be received... Ideally we'd have the behavior that getting an 
+     * ACK tells us everything is OK, otherwise we time out on waiting for an ACK and tell this
+     * to the user. */
+    nl_recvmsgs_default(nf10_genl_sock);
+
+    driver_disconnect();
+}
+
 static struct command all_commands[] = {
     { "echo", 1, 1, do_echo },
     { "dma_tx", 1, 2, do_dma_tx },
     { "dma_rx", 0, 0, do_dma_rx },
     { "reg_rd", 1, 1, do_reg_rd },
     { "reg_wr", 2, 2, do_reg_wr },
+    { "napi_enable", 0, 0, do_napi_enable },
+    { "napi_disable", 0, 0, do_napi_disable },
     { NULL, 0, 0, NULL },
 };

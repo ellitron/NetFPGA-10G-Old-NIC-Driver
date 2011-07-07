@@ -525,33 +525,64 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
     return 0;
 }
 
+/* NAPI enable command.
+ * Application sends us this command to enable NAPI polling for RX packets. */
+int genl_cmd_napi_enable(struct sk_buff *skb, struct genl_info *info)
+{
+    /* Enable NAPI. */
+    napi_enable(&nf10_napi_struct);
+    
+    /* Start the polling timer for receiving packets. */
+    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+    add_timer(&rx_poll_timer); 
+
+    PDEBUG("genl_cmd_napi_enable(): NAPI polling enabled\n");    
+
+    return 0;
+}
+
+/* NAPI disable command.
+ * Application sends us this command to disable NAPI polling for RX packets. */
+int genl_cmd_napi_disable(struct sk_buff *skb, struct genl_info *info)
+{
+    /* Disable NAPI. */
+    napi_disable(&nf10_napi_struct);
+
+    /* Stop the polling timer for receiving packets. */
+    del_timer(&rx_poll_timer); 
+
+    PDEBUG("genl_cmd_napi_disable(): NAPI polling disabled\n");    
+
+    return 0;
+}
+
 /* Operations defined for our Generic Netlink family... */
 
 /* Echo operation genl structure. */
 struct genl_ops genl_ops_echo = {
-    .cmd    = NF10_GENL_C_ECHO,
-    .flags    = 0,
-    .policy    = nf10_genl_policy,
-    .doit    = genl_cmd_echo,
-    .dumpit    = NULL,
+    .cmd        = NF10_GENL_C_ECHO,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_echo,
+    .dumpit     = NULL,
 };
 
 /* DMA TX operation genl structure. */
 struct genl_ops genl_ops_dma_tx = {
-    .cmd    = NF10_GENL_C_DMA_TX,
-    .flags    = 0,
-    .policy    = nf10_genl_policy,
-    .doit    = genl_cmd_dma_tx,
-    .dumpit    = NULL,
+    .cmd        = NF10_GENL_C_DMA_TX,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_dma_tx,
+    .dumpit     = NULL,
 };
 
 /* DMA RX operation genl structure. */
 struct genl_ops genl_ops_dma_rx = {
-    .cmd    = NF10_GENL_C_DMA_RX,
-    .flags    = 0,
-    .policy    = nf10_genl_policy,
-    .doit    = genl_cmd_dma_rx,
-    .dumpit    = NULL,
+    .cmd        = NF10_GENL_C_DMA_RX,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_dma_rx,
+    .dumpit     = NULL,
 };
 
 /* Register read operation genl structure. */
@@ -572,12 +603,32 @@ struct genl_ops genl_ops_reg_wr = {
     .dumpit     = NULL,
 };
 
+/* Register NAPI enable operation genl structure. */
+struct genl_ops genl_ops_napi_enable = {
+    .cmd        = NF10_GENL_C_NAPI_ENABLE,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_napi_enable,
+    .dumpit     = NULL,
+};
+
+/* Register NAPI disable operation genl structure. */
+struct genl_ops genl_ops_napi_disable = {
+    .cmd        = NF10_GENL_C_NAPI_DISABLE,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_napi_disable,
+    .dumpit     = NULL,
+};
+
 static struct genl_ops *genl_all_ops[] = {
     &genl_ops_echo,
     &genl_ops_dma_tx,
     &genl_ops_dma_rx,
     &genl_ops_reg_rd,
     &genl_ops_reg_wr,
+    &genl_ops_napi_enable,
+    &genl_ops_napi_disable,
 };
 
 /* These are the IDs of the PCI devices that this Ethernet driver supports. */
