@@ -75,7 +75,9 @@ static int nf10_reg_rd_recv_msg_cb(struct nl_msg *msg, void *arg)
     struct nlmsghdr *nlh;
     struct nlattr   *na;
     struct nlattr   *attrs[NF10_GENL_A_MAX + 1];
-    uint32_t        val;
+    uint32_t        *val_ptr;
+
+    val_ptr = (uint32_t*)arg;
 
     nlh = nlmsg_hdr(msg);
 
@@ -85,17 +87,18 @@ static int nf10_reg_rd_recv_msg_cb(struct nl_msg *msg, void *arg)
     if(na) {
         if(nla_data(na) == NULL)
             return -NLE_NOATTR;
-        else 
-            return *(uint32_t*)nla_data(na);
+        else {
+            *val_ptr = *(uint32_t*)nla_data(na);
+            return 0;
+        }
     } else 
         return -NLE_MISSING_ATTR;
 }
 
-uint32_t nf10_reg_rd(uint32_t addr)
+int nf10_reg_rd(uint32_t addr, uint32_t *val_ptr)
 {
     struct nl_msg   *msg;
     int             err;   
-    uint32_t        val; 
 
     err = driver_connect();
     if(err) 
@@ -116,17 +119,21 @@ uint32_t nf10_reg_rd(uint32_t addr)
     /* nl_send_auto will automatically fill in the PID and the sequence number,
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
-    nl_send_auto(nf10_genl_sock, msg);
+    err = nl_send_auto(nf10_genl_sock, msg);
+    if(err < 0)
+        return err;
 
     nlmsg_free(msg);
 
-    nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, nf10_reg_rd_recv_msg_cb, NULL);
+    nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, nf10_reg_rd_recv_msg_cb, (void*)val_ptr);
     
-    val = nl_recvmsgs_default(nf10_genl_sock);
+    err = nl_recvmsgs_default(nf10_genl_sock);
+    if(err)
+        return err;
 
     driver_disconnect();    
 
-    return val;
+    return 0;
 }
 
 static int nf10_reg_wr_recv_ack_cb(struct nl_msg *msg, void *arg)
@@ -159,7 +166,9 @@ int nf10_reg_wr(uint32_t addr, uint32_t val)
     /* nl_send_auto will automatically fill in the PID and the sequence number,
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
-    nl_send_auto(nf10_genl_sock, msg);
+    err = nl_send_auto(nf10_genl_sock, msg);
+    if(err < 0)
+        return err;
 
     nlmsg_free(msg);
 
