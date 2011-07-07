@@ -530,10 +530,32 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
 int genl_cmd_napi_enable(struct sk_buff *skb, struct genl_info *info)
 {
     /* Enable NAPI. */
-    napi_enable(&nf10_napi_struct);
+    /* OK the reason for commenting this out and the napi_disable below
+     * is kind of complicated. It comes down to the issue of calling
+     * enable when it's already enabled, or disable when it's already
+     * disabled. As far as I can see from the napi code, it seems that
+     * the disabled state is simply permanently being in the scheduled
+     * state (NAPI_STATE_SCHED), but this state is also used for when
+     * you really have a NAPI poll scheduled. So the two states...
+     * having something scheduled and being disabled are
+     * indistinguishable... therefore there's no way to tell before
+     * calling napi_disable if you've already disabled napi. To make
+     * things simple, these functions therefore just stop/start the
+     * rx_poll_timer. True, it's possible that there's a polling going
+     * on when you del_timer and then the timer gets started back up
+     * again at the end of the napi polling loop. These functions are
+     * meant more for playing around and debugging this driver, not for
+     * anything mission critical, so in this particular situation I
+     * think this is fine. */
+    //napi_enable(&nf10_napi_struct);
     
-    /* Start the polling timer for receiving packets. */
+    /* Set the polling timer for receiving packets. */
     rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+
+    /* Delete the timer just in case it's already in the list. */
+    del_timer(&rx_poll_timer);
+
+    /* Start. */
     add_timer(&rx_poll_timer); 
 
     PDEBUG("genl_cmd_napi_enable(): NAPI polling enabled\n");    
@@ -546,7 +568,7 @@ int genl_cmd_napi_enable(struct sk_buff *skb, struct genl_info *info)
 int genl_cmd_napi_disable(struct sk_buff *skb, struct genl_info *info)
 {
     /* Disable NAPI. */
-    napi_disable(&nf10_napi_struct);
+    //napi_disable(&nf10_napi_struct);
 
     /* Stop the polling timer for receiving packets. */
     del_timer(&rx_poll_timer); 
@@ -767,21 +789,6 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     return NETDEV_TX_OK;
 }
 
-/* Callback function for the rx_poll_timer. */
-static void rx_poll_timer_cb(unsigned long arg)
-{
-    //PDEBUG("rx_poll_timer_fn(): Timer fired\n");
-    
-    /* Check for received packets. */
-    if(rx_dma_stream.flags[rx_dma_stream.buf_index] == 1) {
-        /* Schedule a poll. */
-        napi_schedule(&nf10_napi_struct);
-    } else {
-        rx_poll_timer.expires += RX_POLL_INTERVAL;
-        add_timer(&rx_poll_timer);
-    }
-}
-
 /* Helper functions for getting and setting source and destination
  * ports. The interpretation of opcode depends on the direction the
  * packet is headed, therefore we need {rx,tx}x{src,dst}x{get,set}
@@ -862,7 +869,20 @@ void tx_set_src_iface(uint32_t *opcode, uint32_t src_iface)
     rx_set_dst_iface(opcode, src_iface);
 }
 
-
+/* Callback function for the rx_poll_timer. */
+static void rx_poll_timer_cb(unsigned long arg)
+{
+    //PDEBUG("rx_poll_timer_fn(): Timer fired\n");
+    
+    /* Check for received packets. */
+    if(rx_dma_stream.flags[rx_dma_stream.buf_index] == 1) {
+        /* Schedule a poll. */
+        napi_schedule(&nf10_napi_struct);
+    } else {
+        rx_poll_timer.expires += RX_POLL_INTERVAL;
+        add_timer(&rx_poll_timer);
+    }
+}
 
 /* Slurp up packets. */
 static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
@@ -1506,7 +1526,7 @@ static int __init nf10_eth_driver_init(void)
 
     /* Enable NAPI. */
     napi_enable(&nf10_napi_struct);
-    
+ 
     /* Start the polling timer for receiving packets. */
     rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
     add_timer(&rx_poll_timer);
