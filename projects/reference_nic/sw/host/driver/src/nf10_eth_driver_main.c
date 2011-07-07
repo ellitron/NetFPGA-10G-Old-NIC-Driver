@@ -294,7 +294,7 @@ int genl_cmd_dma_tx(struct sk_buff *skb, struct genl_info *info)
     PDEBUG("genl_cmd_dma_tx(): DMA TX operation info:\n"
         "\tReceived msg:\t\t%s\n"
         "\tReceived msg length:\t%d\n"
-        "\tReceived opcode:\t:0x%08x\n"
+        "\tReceived opcode:\t0x%08x\n"
         "\tUsing buffer number:\t%d\n",
         (char*)nla_data(na_msg), nla_len(na_msg), *(uint32_t*)nla_data(na_opcode), tx_dma_stream.buf_index);    
 
@@ -614,7 +614,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     void *data;
     uint32_t len;
     int waited;
-    uint32_t iface;
+    int iface;
     uint32_t opcode;
 
     PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");    
@@ -802,10 +802,10 @@ void tx_set_src_iface(uint32_t *opcode, uint32_t src_iface)
 /* Slurp up packets. */
 static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
 {
-    int n_rx = 0;
-    struct sk_buff *skb;
-    int buf_index = rx_dma_stream.buf_index;
-    uint32_t dst_iface; /* Destination interface. */
+    int             n_rx = 0;
+    struct sk_buff  *skb;
+    int             buf_index = rx_dma_stream.buf_index;
+    int             dst_iface; /* Destination interface. */
     
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
