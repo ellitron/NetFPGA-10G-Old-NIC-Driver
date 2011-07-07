@@ -1,21 +1,42 @@
-/* FIXME: Add proper comment headers. */
-/* NOTE: This program utilizes the libnl-3.0 library for generic netlink functions.
- * You must install this library before compiling (http://www.infradead.org/~tgr/libnl/). */
+/* NetFPGA-10G http://www.netfpga.org
+ * 
+ * NetFPGA-10G Register Access Library
+ *
+ * Description: 
+ *  A library of functions for reading and writing register in the
+ *  hardware. These functions read and write registers by invoking
+ *  register access functions in the linux driver over a generic netlink
+ *  interface. Therefore, the driver must be loaded in the kernel for
+ *  these functions to work. Please refer to the wiki for detailed
+ *  documentation.
+ *
+ * Notes:
+ *  
+ *  This library makes use of the libnl-3.0 library for generic netlink
+ *  functions. You must install this library into your system before
+ *  compiling (http://www.infradead.org/~tgr/libnl/).
+ *
+ * Revision history: 
+ *  2011/07/06 Jonathan Ellithorpe: "Let there be a register access
+ *                                  library..."
+ */
 
 /* Header files provided by libnl (probably in /usr/local/include). */
 #include <netlink/netlink.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 
+/* Standard header files. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdarg.h>
 #include <getopt.h>
 
-#include "nf10_eth_driver.h"
+/* NF10 specific generic netlink definitions  */
+#include "nf10_genl.h"
 
-static int driver_connect(void);
+static int  driver_connect(void);
 static void driver_disconnect(void);
 
 struct nl_sock *nf10_genl_sock;

@@ -28,8 +28,13 @@
 #include <net/genetlink.h>
 #include <linux/dma-mapping.h>
 
+/* Driver specific definitions. */
 #include "nf10_eth_driver.h"
 
+/* NF10 specific generic netlink definitions. */
+#include "nf10_genl.h"
+
+/* OpenCPI specific definitions. */
 #include "occp.h"
 #include "ocdp.h"
 

@@ -13,7 +13,8 @@
 #include <stdarg.h>
 #include <getopt.h>
 
-#include "nf10_eth_driver.h"
+/* NF10 specific generic netlink definitions. */
+#include "nf10_genl.h"
 
 static void set_program_name(const char *);
 static void parse_options(int, char*[]);
