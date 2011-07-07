@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <getopt.h>
+#include <errno.h>
 
 /* NF10 specific generic netlink definitions  */
 #include "nf10_genl.h"
@@ -46,23 +47,19 @@ static int driver_connect()
     int err;
 
     nf10_genl_sock = nl_socket_alloc();
-    if(nf10_genl_sock == NULL) {
-        printf("nf10_reg_lib: ERROR: driver_connect(): could not allocate netlink socket\n");
-        return -1;
-    }
+    if(nf10_genl_sock == NULL)
+        return -NLE_NOMEM;
 
     err = genl_connect(nf10_genl_sock);
-    if(err != 0) {
-        printf("nf10_reg_lib: ERROR: driver_connect(): could not connect to driver over generic netlink socket\n");
+    if(err) {
         nl_socket_free(nf10_genl_sock);
         return err;
     }
 
     nf10_genl_family = genl_ctrl_resolve(nf10_genl_sock, NF10_GENL_FAMILY_NAME);
     if(nf10_genl_family < 0) {
-        printf("nf10_reg_lib: ERROR: driver_connect(): could not resolve generic netlink family channel number\n");
         nl_socket_free(nf10_genl_sock);
-        return -1;
+        return nf10_genl_family;
     }
 
     return 0;
@@ -87,32 +84,27 @@ static int nf10_reg_rd_recv_msg_cb(struct nl_msg *msg, void *arg)
     na = attrs[NF10_GENL_A_REGVAL32];
     if(na) {
         if(nla_data(na) == NULL)
-            printf("nf10_reg_lib: ERROR: nf10_reg_rd_recv_msg_cb(): got NULL REGVAL32 generic netlink attribute\n");
+            return -NLE_NOATTR;
         else 
             return *(uint32_t*)nla_data(na);
     } else 
-        printf("nf10_reg_lib: ERROR: nf10_reg_rd_recv_msg_cb(): driver didn't send back a register value\n");
-
-    return -1;
+        return -NLE_MISSING_ATTR;
 }
 
 uint32_t nf10_reg_rd(uint32_t addr)
 {
     struct nl_msg   *msg;
-    int err;   
-    uint32_t val; 
+    int             err;   
+    uint32_t        val; 
 
     err = driver_connect();
-    if(err != 0) {
-        printf("nf10_reg_lib: ERROR: nf10_reg_rd(): failed to connect to the driver\n");
-        return -1;
-    }
+    if(err) 
+        return err;
 
     msg = nlmsg_alloc();
     if(msg == NULL) {
-        printf("nf10_reg_lib: ERROR: nf10_reg_rd(): could not allocate new netlink message\n");
         driver_disconnect();
-        return -1;
+        return -NLE_NOMEM;
     }
 
     /* genlmsg_put will fill in the fields of the nlmsghdr and the genlmsghdr. */
@@ -145,19 +137,16 @@ static int nf10_reg_wr_recv_ack_cb(struct nl_msg *msg, void *arg)
 int nf10_reg_wr(uint32_t addr, uint32_t val)
 {
     struct nl_msg   *msg;
-    int err;    
+    int             err;    
 
     err = driver_connect();
-    if(err != 0) {
-        printf("nf10_reg_lib: ERROR: nf10_reg_wr(): failed to connect to the driver\n");
+    if(err)
         return err;
-    }
 
     msg = nlmsg_alloc();
     if(msg == NULL) {
-        printf("nf10_reg_lib: ERROR: nf10_reg_wr(): could not allocate new netlink message\n");
         driver_disconnect();
-        return -1;
+        return -NLE_NOMEM;
     }
 
     /* genlmsg_put will fill in the fields of the nlmsghdr and the genlmsghdr. */
