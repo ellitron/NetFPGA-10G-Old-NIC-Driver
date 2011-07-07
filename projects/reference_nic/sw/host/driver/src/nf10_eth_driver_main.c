@@ -639,6 +639,17 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
         return NETDEV_TX_OK;
     }
 
+    /* Opcode for setting source and destination ports. */
+    opcode = 0;
+    iface = get_iface_from_netdev(netdev);
+    if(iface < 0) {
+        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): could not determine source interface number from netdev\n", driver_name);
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
+    }
+    tx_set_src_iface(&opcode, iface); 
+
     /* Start the clock! */
     netdev->trans_start = jiffies;
 
@@ -662,11 +673,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Fill out metadata. */
     /* Length. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].length = len;
-    
-    /* Opcode for setting source and destination ports. */
-    opcode = 0;
-    iface = get_iface_from_netdev(netdev);
-    tx_set_src_iface(&opcode, iface);
+    /* OpCode. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = opcode;
 
     /* Set the buffer flag to full. */
@@ -811,6 +818,23 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             buf_index);
 
         dst_iface = rx_get_dst_iface(rx_dma_stream.metadata[buf_index].opCode);
+        if(dst_iface < 0) {
+            printk(KERN_NOTICE "NOTICE: nf10_napi_struct_poll(): failed to determine destination Ethernet interface from opcode (0x%08x)... dropping the packet\n", rx_dma_stream.metadata[buf_index].opCode);
+
+            /* Mark the buffer as empty. */
+            rx_dma_stream.flags[buf_index] = 0;
+
+            /* Tell the hardware we emptied the buffer. */
+            *rx_dma_stream.doorbell = 1;
+
+            /* Update the buffer index. */
+            if(++rx_dma_stream.buf_index == dma_cpu_bufs)
+                rx_dma_stream.buf_index = 0;
+
+            buf_index = rx_dma_stream.buf_index;   
+
+            continue; 
+        }
 
         /* FIXME: Do I need to allocate any more room than this? Don't
          * think so... snull driver has a +2 here */
