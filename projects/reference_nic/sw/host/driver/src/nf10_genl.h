@@ -25,6 +25,7 @@ enum {
     NF10_GENL_A_DMA_BUF,
     NF10_GENL_A_ADDR32,    
     NF10_GENL_A_REGVAL32,
+    NF10_GENL_A_OPCODE,
 
     __NF10_GENL_A_MAX,
 };

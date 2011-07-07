@@ -190,7 +190,7 @@ int genl_cmd_echo(struct sk_buff *skb, struct genl_info *info)
             printk(KERN_INFO "nf10_eth_driver: genl_cmd_echo(): received: %s\n", msg);
     } 
     else {
-        printk(KERN_WARNING "nf10_eth_driver: genl_cmd_echo(): no attributes in message\n");
+        printk(KERN_WARNING "nf10_eth_driver: genl_cmd_echo(): no msg attribute in generic netlink command\n");
         return 0;
     }
 
@@ -233,10 +233,9 @@ int genl_cmd_echo(struct sk_buff *skb, struct genl_info *info)
  * Application sends us a message to transmit to the device over DMA. */
 int genl_cmd_dma_tx(struct sk_buff *skb, struct genl_info *info)
 {
-    struct nlattr     *na;    
-    void*        msg_data;
-    size_t        msg_len;
-    uint8_t        waited;
+    struct nlattr   *na_msg, *na_opcode;    
+    void*           msg_data;
+    size_t          msg_len;
 
     /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
      * the right data structures have actually been initialized and so on... */ 
@@ -247,49 +246,57 @@ int genl_cmd_dma_tx(struct sk_buff *skb, struct genl_info *info)
     }
     
     /* Receive the message to transmit. */
-    na = info->attrs[NF10_GENL_A_MSG];
-    if(na) {
-        if(nla_data(na) == NULL) {
+    na_msg = info->attrs[NF10_GENL_A_MSG];
+    if(na_msg) {
+        if(nla_data(na_msg) == NULL) {
             printk(KERN_WARNING "%s: genl_cmd_dma_tx(): msg attribute has no data\n", driver_name);
             return 0;
         }
-    } 
-    else {
-        printk(KERN_WARNING "%s: genl_cmd_dma_tx(): no attributes in message\n", driver_name);
+    } else {
+        printk(KERN_WARNING "%s: genl_cmd_dma_tx(): no msg attribute found in generic netlink command\n", driver_name);
         return 0;
     }
 
-    /* Wait for buffer to be free. */
-    /* FIXME: actually in the case that the buffer is not free... let's instead send a msg
-     * to the user and exit this function. */
-    waited = 0;
-    while(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
-        if(!waited)
-            PDEBUG("genl_cmd_dma_tx(): waiting for buffer: %d\n", tx_dma_stream.buf_index);
-        waited = 1;
+    /* Receive the opcode to use. */
+    na_opcode = info->attrs[NF10_GENL_A_OPCODE];
+    if(na_opcode) {
+        if(nla_data(na_opcode) == NULL) {
+            printk(KERN_WARNING "%s: genl_cmd_dma_tx(): opcode attribute has no data\n", driver_name);
+            return 0;
+        }
+    } else {
+        printk(KERN_WARNING "%s: genl_cmd_dma_tx(): no opcode attribute found in generic netlink command\n", driver_name);
+        return 0;
+    }
+
+    /* If all the buffers are full, abort. */
+    if(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
+        PDEBUG("genl_cmd_dma_tx(): all buffers full, aborting...\n");
+        return 0;
     }
 
     PDEBUG("genl_cmd_dma_tx(): filling free buffer: %d\n", tx_dma_stream.buf_index);
 
-    msg_data = nla_data(na);
+    msg_data = nla_data(na_msg);
     /* Cap the msg_len to DMA_BUF_SIZE. */
-    msg_len = (nla_len(na) > DMA_BUF_SIZE) ? DMA_BUF_SIZE : nla_len(na);
+    msg_len = (nla_len(na_msg) > DMA_BUF_SIZE) ? DMA_BUF_SIZE : nla_len(na_msg);
 
     /* Copy message into buffer. */
     memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], msg_data, msg_len);    
     
     /* Fill out metadata. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].length = msg_len;
-    tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = 0;    /* FIXME: needed? */    
-
+    tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = *(uint32_t*)nla_data(na_opcode);
+    
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
     PDEBUG("genl_cmd_dma_tx(): DMA TX operation info:\n"
         "\tReceived msg:\t\t%s\n"
         "\tReceived msg length:\t%d\n"
+        "\tReceived opcode:\t:0x%08x\n"
         "\tUsing buffer number:\t%d\n",
-        (char*)nla_data(na), nla_len(na), tx_dma_stream.buf_index);    
+        (char*)nla_data(na_msg), nla_len(na_msg), *(uint32_t*)nla_data(na_opcode), tx_dma_stream.buf_index);    
 
     /* Tell hardware we filled a buffer. */
     *tx_dma_stream.doorbell = 1;
@@ -409,12 +416,12 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     na = info->attrs[NF10_GENL_A_ADDR32];
     if(na) {
         if(nla_data(na) == NULL) {
-            printk(KERN_WARNING "%s: genl_cmd_reg_rd(): msg attribute has no data\n", driver_name);
+            printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address attribute has no data\n", driver_name);
             return 0;
         }
     } 
     else {
-        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): no attributes in message\n", driver_name);
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): no address attribute in generic netlink command\n", driver_name);
         return 0;
     }
 
@@ -469,12 +476,12 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
     na_addr = info->attrs[NF10_GENL_A_ADDR32];
     if(na_addr) {
         if(nla_data(na_addr) == NULL) {
-            printk(KERN_WARNING "%s: genl_cmd_reg_wr(): msg attribute ADDR32 has no data\n", driver_name);
+            printk(KERN_WARNING "%s: genl_cmd_reg_wr(): address attribute has no data\n", driver_name);
             return 0;
         }
     } 
     else {
-        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no address attribute in message\n", driver_name);
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no address attribute in generic netlink command\n", driver_name);
         return 0;
     }
 
@@ -482,12 +489,12 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
     na_val = info->attrs[NF10_GENL_A_REGVAL32];
     if(na_val) {
         if(nla_data(na_val) == NULL) {
-            printk(KERN_WARNING "%s: genl_cmd_reg_wr(): msg attribute REGVAL32 has no data\n", driver_name);
+            printk(KERN_WARNING "%s: genl_cmd_reg_wr(): register value attribute has no data\n", driver_name);
             return 0;
         }
     }
     else {
-        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no register value attribute in message\n", driver_name);
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no register value attribute in generic netlink command\n", driver_name);
         return 0;
     }
 

@@ -256,6 +256,10 @@ static void do_dma_tx(int argc, char *argv[])
             NF10_GENL_C_DMA_TX, NF10_GENL_FAMILY_VERSION);
 
     nla_put_string(msg, NF10_GENL_A_MSG, argv[1]);
+    if(argc == 3)
+        nla_put_u32(msg, NF10_GENL_A_OPCODE, (uint32_t)strtoull(argv[2], NULL, 0));
+    else
+        nla_put_u32(msg, NF10_GENL_A_OPCODE, 0);
 
     /* nl_send_auto will automatically fill in the PID and the sequence number,
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
@@ -460,7 +464,7 @@ static void do_reg_wr(int argc, char *argv[])
 
 static struct command all_commands[] = {
     { "echo", 1, 1, do_echo },
-    { "dma_tx", 1, 1, do_dma_tx },
+    { "dma_tx", 1, 2, do_dma_tx },
     { "dma_rx", 0, 0, do_dma_rx },
     { "reg_rd", 1, 1, do_reg_rd },
     { "reg_wr", 2, 2, do_reg_wr },
