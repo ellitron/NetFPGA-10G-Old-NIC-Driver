@@ -135,6 +135,7 @@ int nf10_reg_rd(uint32_t addr, uint32_t *val_ptr)
     err = nl_send_auto(nf10_genl_sock, msg);
     if(err < 0) {
         driver_disconnect();
+        nlmsg_free(msg);
         return err;
     }
 
@@ -199,6 +200,7 @@ int nf10_reg_wr(uint32_t addr, uint32_t val)
     err = nl_send_auto(nf10_genl_sock, msg);
     if(err < 0) {
         driver_disconnect();
+        nlmsg_free(msg);
         return err;
     }
 
