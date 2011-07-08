@@ -132,7 +132,10 @@ static const struct net_device_ops nf10_netdev_ops = {
 #define WORKER_SMA1     4
 #define WORKER_NF10     0
 
-/* FIXME: ought to think about this some more... what does timeout actually mean? */
+/* 2^OCCP_LOG_TIMEOUT is the number of cycles that a slave has to
+ * respond to a request from a master. The significance for NF10 designs
+ * is that they have this many cycles to respond to register accesses
+ * across the AXI-lite interface to the design coming from OPED. */
 #define OCCP_LOG_TIMEOUT    4
 
 /* Pointer to OCPI register space for the NF10 design. */
@@ -1496,6 +1499,11 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         err = -1;
     }
     
+    if(nf10_ctrl->start != OCCP_SUCCESS_RESULT) {
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker start failure for nf10 worker\n", driver_name);
+        err = -1;
+    }
+
     if(err) {
         dma_free_coherent(&pdev->dev, dma_region_size, rx_dma_reg_va, rx_dma_reg_pa);
         dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
