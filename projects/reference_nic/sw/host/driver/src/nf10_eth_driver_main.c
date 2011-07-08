@@ -11,6 +11,7 @@
 
 /* FIXME: Make function comment headers that of standard linux style. */
 /* FIXME: Make naming conistent (nf10_pci_driver, probe, remove vs. nf10_netdev_ops... nf10_ prefix?? */
+/* FIXME: Generally need to make sure that I free the skb_reply data structures... which I'm not doing a very good job of doing right now. */
 
 /* Documentation resources:
  * kernel/Documentation/DMA-API-HOWTO.txt
@@ -441,11 +442,13 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     if(na) {
         if(nla_data(na) == NULL) {
             printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address attribute has no data\n", driver_name);
+            /* FIXME: need to free data structures! */
             return 0;
         }
     } 
     else {
         printk(KERN_WARNING "%s: genl_cmd_reg_rd(): no address attribute in generic netlink command\n", driver_name);
+        /* FIXME: need to free data structures! */
         return 0;
     }
 
@@ -453,6 +456,14 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     reg_addr        = *(uint32_t*)nla_data(na);
     reg_addr_page   = reg_addr / OCCP_WORKER_CONFIG_SIZE;
     reg_addr_offset = reg_addr % OCCP_WORKER_CONFIG_SIZE;
+
+    /* Check that offset is 4B word aligned. */
+    if(reg_addr_offset % 4) {
+        /* Abort! */
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address not 4B word aligned (0x%08x)... aborting read operation.\n", driver_name, reg_addr);
+        /* FIXME: need to free data structures! */
+        return 0;
+    }
 
     /* Set page register. */
     nf10_ctrl->pageWindow = reg_addr_page;
@@ -539,6 +550,13 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
     reg_addr        = *(uint32_t*)nla_data(na_addr);
     reg_addr_page   = reg_addr / OCCP_WORKER_CONFIG_SIZE;
     reg_addr_offset = reg_addr % OCCP_WORKER_CONFIG_SIZE;
+
+    /* Check that offset is 4B word aligned. */
+    if(reg_addr_offset % 4) {
+        /* Abort! */
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): address not 4B word aligned (0x%08x)... aborting write operation.\n", driver_name, reg_addr);
+        return 0;
+    }
     
     /* Get value to write. */
     reg_val = *(uint32_t*)nla_data(na_val);
