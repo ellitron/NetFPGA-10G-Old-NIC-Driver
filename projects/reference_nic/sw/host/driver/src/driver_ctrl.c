@@ -341,40 +341,44 @@ static void do_dma_rx(int argc, char* argv[])
 static int do_reg_rd_recv_msg_cb(struct nl_msg *msg, void *arg)
 {
     struct nlmsghdr *nlh;
-    struct nlattr   *na;
+    struct nlattr   *na_regval;
+    struct nlattr   *na_errno;
     struct nlattr   *attrs[NF10_GENL_A_MAX + 1];
-    uint32_t        val;
+    uint32_t        *val_ptr;
+    int             err;
+
+    val_ptr = (uint32_t*)arg;
 
     nlh = nlmsg_hdr(msg);
 
     genlmsg_parse(nlh, 0, attrs, NF10_GENL_A_MAX, 0);
 
-    na = attrs[NF10_GENL_A_REGVAL32];
-    if(na) {
-        if(nla_data(na) == NULL) {
-            printf("ERROR: do_reg_rd_recv_msg_cb(): NF10_GENL_A_REGVAL32 attribute has NULL data\n");
-        } else {
-
-            /* Cheating a bit... */
-            //nl_msg_dump(msg, stdout);
-        
-            val = *(uint32_t*)nla_data(na);
-
-            printf("0x%08x\n", val);
-            return val;
-        }
-    }
-    else {
-        printf("ERROR: do_reg_rd_recv_msg_cb(): no register value attribute returned\n");
+    /* First, get the errno. */
+    na_errno = attrs[NF10_GENL_A_ERRNO];
+    if(na_errno && nla_data(na_errno)) {
+        err = *(int*)nla_data(na_errno);
+    } else {
+        return -NLE_NOATTR;
     }
 
-    return -1;
+    /* If there was an error, pass is up. */
+    if(err)
+        return err;
+
+    /* Passed error check, get register value. */
+    na_regval = attrs[NF10_GENL_A_REGVAL32];
+    if(na_regval && nla_data(na_regval)) {
+        *val_ptr = *(uint32_t*)nla_data(na_regval);
+        return 0;
+    } else
+        return -NLE_NOATTR;
 }
 
 static void do_reg_rd(int argc, char* argv[])
 {
     struct nl_msg   *msg;
-    int err;   
+    int             err;  
+    uint32_t        *val_ptr; 
 
     err = driver_connect();
     if(err != 0) {
@@ -398,23 +402,47 @@ static void do_reg_rd(int argc, char* argv[])
     /* nl_send_auto will automatically fill in the PID and the sequence number,
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
-    nl_send_auto(nf10_genl_sock, msg);
+    err = nl_send_auto(nf10_genl_sock, msg);
+    if(err < 0) {
+        printf("ERROR: do_reg_rd(): couldn't send netlink message\n");
+        nlmsg_free(msg);
+        driver_disconnect();
+        return;
+    }
 
     nlmsg_free(msg);
 
-    nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, do_reg_rd_recv_msg_cb, NULL);
+    nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, do_reg_rd_recv_msg_cb, (void*)val_ptr);
     
-    nl_recvmsgs_default(nf10_genl_sock);
-
+    err = nl_recvmsgs_default(nf10_genl_sock);
+    if(err)
+        printf("ERROR: do_reg_rd(): driver reported back an error\n");
+    else
+        printf("0x%08x\n", *val_ptr);
+    
     driver_disconnect();    
 }
 
 static int do_reg_wr_recv_ack_cb(struct nl_msg *msg, void *arg)
 {
-    /* FIXME: msg doesn't really make sense to user... */
-    //printf("Received ACK\n");
+    struct nlmsghdr *nlh;
+    struct nlattr   *na_errno;
+    struct nlattr   *attrs[NF10_GENL_A_MAX + 1];
+    int             err;
 
-    return 0;
+    nlh = nlmsg_hdr(msg);
+
+    genlmsg_parse(nlh, 0, attrs, NF10_GENL_A_MAX, 0);
+
+    /* Get the errno. */
+    na_errno = attrs[NF10_GENL_A_ERRNO];
+    if(na_errno && nla_data(na_errno)) {
+        err = *(int*)nla_data(na_errno);
+    } else {
+        return -NLE_NOATTR;
+    }
+
+    return err;
 }
 
 static void do_reg_wr(int argc, char *argv[])
@@ -445,7 +473,13 @@ static void do_reg_wr(int argc, char *argv[])
     /* nl_send_auto will automatically fill in the PID and the sequence number,
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
-    nl_send_auto(nf10_genl_sock, msg);
+    err = nl_send_auto(nf10_genl_sock, msg);
+    if(err < 0) {
+        printf("ERROR: do_reg_wr(): couldn't send netlink message\n");
+        nlmsg_free(msg);
+        driver_disconnect();
+        return;
+    }
 
     nlmsg_free(msg);
 
@@ -455,7 +489,9 @@ static void do_reg_wr(int argc, char *argv[])
      * seem to wait for the ACK to be received... Ideally we'd have the behavior that getting an 
      * ACK tells us everything is OK, otherwise we time out on waiting for an ACK and tell this
      * to the user. */
-    nl_recvmsgs_default(nf10_genl_sock);
+    err = nl_recvmsgs_default(nf10_genl_sock);
+    if(err)
+        printf("ERROR: do_reg_wr(): driver reported back an error\n");
 
     driver_disconnect();
 }

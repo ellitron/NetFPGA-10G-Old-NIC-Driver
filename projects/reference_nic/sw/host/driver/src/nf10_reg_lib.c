@@ -134,8 +134,8 @@ int nf10_reg_rd(uint32_t addr, uint32_t *val_ptr)
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
     err = nl_send_auto(nf10_genl_sock, msg);
     if(err < 0) {
-        driver_disconnect();
         nlmsg_free(msg);
+        driver_disconnect();
         return err;
     }
 
@@ -199,8 +199,8 @@ int nf10_reg_wr(uint32_t addr, uint32_t val)
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
     err = nl_send_auto(nf10_genl_sock, msg);
     if(err < 0) {
-        driver_disconnect();
         nlmsg_free(msg);
+        driver_disconnect();
         return err;
     }
 
