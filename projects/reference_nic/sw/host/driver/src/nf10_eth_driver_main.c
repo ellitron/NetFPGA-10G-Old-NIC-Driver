@@ -1293,22 +1293,24 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
     /* Reset workers. */
 
     /* Assert reset. */
-    dp0_regs->control    = OCCP_LOG_TIMEOUT;
-    dp1_regs->control    = OCCP_LOG_TIMEOUT;
-    sma0_regs->control    = OCCP_LOG_TIMEOUT;
-    sma1_regs->control    = OCCP_LOG_TIMEOUT;
-    bias_regs->control    = OCCP_LOG_TIMEOUT;    
+    dp0_regs->control   = OCCP_LOG_TIMEOUT;
+    dp1_regs->control   = OCCP_LOG_TIMEOUT;
+    sma0_regs->control  = OCCP_LOG_TIMEOUT;
+    sma1_regs->control  = OCCP_LOG_TIMEOUT;
+    bias_regs->control  = OCCP_LOG_TIMEOUT;    
+    nf10_ctrl->control  = OCCP_LOG_TIMEOUT;
 
     /* Write memory barrier. */
     wmb();
 
     /* Take out of reset. */
-    dp0_regs->control    = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;    
-    dp1_regs->control    = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
-    sma0_regs->control    = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
-    sma1_regs->control    = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;    
-    bias_regs->control    = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
-
+    dp0_regs->control   = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;    
+    dp1_regs->control   = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
+    sma0_regs->control  = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
+    sma1_regs->control  = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;    
+    bias_regs->control  = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;
+    nf10_ctrl->control  = OCCP_CONTROL_ENABLE | OCCP_LOG_TIMEOUT;   
+    
     /* Read/Write memory barrier. */
     mb();
 
@@ -1341,6 +1343,11 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         err = -1;
     }
     
+    if(nf10_ctrl->initialize != OCCP_SUCCESS_RESULT) {
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for nf10 worker\n", driver_name);
+        err = -1;
+    }
+
     if(err) {
         dma_free_coherent(&pdev->dev, dma_region_size, rx_dma_reg_va, rx_dma_reg_pa);
         dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
