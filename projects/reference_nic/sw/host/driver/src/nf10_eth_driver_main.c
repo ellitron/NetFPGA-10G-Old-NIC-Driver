@@ -457,7 +457,7 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
 
     /* Check that offset is 4B word aligned. */
     if(reg_addr_offset % 4) {
-        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address not 4B word aligned (0x%08x)... aborting read operation.\n", driver_name, reg_addr);
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address not 4B word aligned (0x%08x)... aborting\n", driver_name, reg_addr);
         err = -1;
         goto send_error;
     }
@@ -580,7 +580,7 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
 
     /* Check that offset is 4B word aligned. */
     if(reg_addr_offset % 4) {
-        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): address not 4B word aligned (0x%08x)... aborting write operation.\n", driver_name, reg_addr);
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): address not 4B word aligned (0x%08x)... aborting\n", driver_name, reg_addr);
         err = -1;
         goto send_error;
     }
