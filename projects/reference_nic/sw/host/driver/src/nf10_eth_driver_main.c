@@ -1128,8 +1128,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
     int err;
     
-    PDEBUG("probe(): entering probe() with vendor_id: 0x%4x and device_id: 0x%4x\n", id->vendor, id->device);    
-    
+    printk(KERN_INFO "nf10_eth_driver: Found NetFPGA-10G device with vendor_id: 0x%4x, device_id: 0x%4x\n", id->vendor, id->device);    
+
     /* Enable the device. pci_enable_device() will do the following (ref. PCI/pci.txt kernel doc):
      *     - wake up the device if it was in suspended state
      *     - allocate I/O and memory regions of the device (if BIOS did not)
@@ -1513,8 +1513,6 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         return err;
     }
     
-
-
     return err;
 }
 
@@ -1531,10 +1529,10 @@ static void remove(struct pci_dev *pdev)
 }
 
 static struct pci_driver nf10_pci_driver = {
-    .name        = "nf10_eth_driver: pci_driver",
-    .id_table    = id_table,
-    .probe        = probe,
-    .remove        = remove,
+    .name       = "nf10_eth_driver: pci_driver",
+    .id_table   = id_table,
+    .probe      = probe,
+    .remove     = remove,
 };
 
 /* Called to fill @buf when user reads our file in /proc. */
@@ -1579,18 +1577,22 @@ static int __init nf10_eth_driver_init(void)
     int err;
     int i;    
 
-    /* Register the pci_driver. */
+    PDEBUG("nf10_eth_driver_init(): loading ethernet driver\n");
+
+    /* Register the pci_driver. 
+     * Note: This will succeed even without a card installed in the system. */
     err = pci_register_driver(&nf10_pci_driver);
     if(err != 0) {
-        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register nf10_pci_driver\n");
+        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register nf10_pci_driver... unloading driver\n");
         return err;
-    }
+    } else
+        PDEBUG("nf10_eth_driver_init(): pci_register_driver... victory!\n");
 
     /* Allocate the network interfaces. */
     for(i = 0; i < NUM_NETDEVS; i++) {
         nf10_netdevs[i] = alloc_netdev(0, "nf%d", nf10_netdev_init);
         if(nf10_netdevs[i] == NULL) {
-            printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to allocate net_device %d\n", i);
+            printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to allocate net_device %d... unloading driver\n", i);
             
             for(i = i-1; i >= 0; i--) 
                 free_netdev(nf10_netdevs[i]);
@@ -1599,19 +1601,25 @@ static int __init nf10_eth_driver_init(void)
             return -ENOMEM;
         }
     }
-   
+
+    PDEBUG("nf10_eth_driver_init(): allocating netdevs... victory!\n");
+
     /* Add NAPI structure to the device. */
     /* Since we have NUM_NETDEVS net_devices, we just use the 1st one for implementing polling. */ 
     netif_napi_add(nf10_netdevs[0], &nf10_napi_struct, nf10_napi_struct_poll, RX_POLL_WEIGHT);
- 
+
+    PDEBUG("nf10_eth_driver_init(): adding napi struct... victory!\n");
+
     /* Register the network interfaces. */
     for(i = 0; i < NUM_NETDEVS; i++) {
         err = register_netdev(nf10_netdevs[i]);
         if(err != 0) {
-            printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register net_device %d\n", i);
-
+            printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register net_device %d... unloading driver\n", i);
+            
             for(i = i-1; i >= 0; i--)
                 unregister_netdev(nf10_netdevs[i]);
+            
+            netif_napi_del(&nf10_napi_struct);
             
             for(i = 0; i < NUM_NETDEVS; i++);
                 free_netdev(nf10_netdevs[i]);
@@ -1621,13 +1629,20 @@ static int __init nf10_eth_driver_init(void)
         }
     }
 
+    PDEBUG("nf10_eth_driver_init(): registering netdevs... victory!\n");
+
     /* Register our Generic Netlink family. */
     err = genl_register_family(&nf10_genl_family);
     if(err != 0) {
-        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): GENL family registration failed\n");
-        
+        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): GENL family registration failed... unloading driver\n");
+       
         for(i = 0; i < NUM_NETDEVS; i++) {
             unregister_netdev(nf10_netdevs[i]);
+        } 
+
+        netif_napi_del(&nf10_napi_struct);
+     
+        for(i = 0; i < NUM_NETDEVS; i++) {
             free_netdev(nf10_netdevs[i]);
         }
 
@@ -1635,14 +1650,23 @@ static int __init nf10_eth_driver_init(void)
         return err;
     }
 
+    PDEBUG("nf10_eth_driver_init(): registering genl family... victory!\n");
+
     /* Register operations with our Generic Netlink family. */
     for(i = 0; i < ARRAY_SIZE(genl_all_ops); i++) {
         err = genl_register_ops(&nf10_genl_family, genl_all_ops[i]);
         if(err != 0) {
+            printk(KERN_ERR "nf10_eth_diver: ERROR: nf10_eth_driver_init(): GENL ops registration failed... unloading driver\n");
+
             genl_unregister_family(&nf10_genl_family);
 
             for(i = 0; i < NUM_NETDEVS; i++) {
                 unregister_netdev(nf10_netdevs[i]);
+            } 
+
+            netif_napi_del(&nf10_napi_struct);
+     
+            for(i = 0; i < NUM_NETDEVS; i++) {
                 free_netdev(nf10_netdevs[i]);
             }
 
@@ -1650,6 +1674,8 @@ static int __init nf10_eth_driver_init(void)
             return err;
         }
     }
+
+    PDEBUG("nf10_eth_driver_init(): registering genl operations... victory!\n");
 
     /* FIXME: Do we need to check for error on create_proc_read_entry? */
     create_proc_read_entry("driver/nf10_eth_driver", 0, NULL, read_proc, NULL);
@@ -1672,24 +1698,29 @@ static void __exit nf10_eth_driver_exit(void)
     int err;
     int i;
 
+    /* Disable NAPI. */
+    napi_disable(&nf10_napi_struct);
+
+    /* Stop the polling timer for receiving packets. */
+    del_timer(&rx_poll_timer);
+    
+    remove_proc_entry("driver/nf10_eth_driver", NULL);
+
     err = genl_unregister_family(&nf10_genl_family);
     if(err != 0)
         printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_exit(): failed to unregister GENL family\n");
 
     for(i = 0; i < NUM_NETDEVS; i++) {
         unregister_netdev(nf10_netdevs[i]);
+    } 
+
+    netif_napi_del(&nf10_napi_struct);
+    
+    for(i = 0; i < NUM_NETDEVS; i++) {
         free_netdev(nf10_netdevs[i]);
     }
 
     pci_unregister_driver(&nf10_pci_driver);
-
-    remove_proc_entry("driver/nf10_eth_driver", NULL);
-
-    /* Disable NAPI. */
-    napi_disable(&nf10_napi_struct);
-
-    /* Stop the polling timer for receiving packets. */
-    del_timer(&rx_poll_timer);
     
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Unloaded.\n");
 }
