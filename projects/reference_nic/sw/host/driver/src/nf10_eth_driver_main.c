@@ -1512,7 +1512,11 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         pci_disable_device(pdev);    
         return err;
     }
-    
+   
+    /* Start the polling timer for receiving packets. */
+    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+    add_timer(&rx_poll_timer);
+ 
     return err;
 }
 
@@ -1572,21 +1576,11 @@ void nf10_netdev_init(struct net_device *netdev)
 
 /* Initialization. */
 static int __init nf10_eth_driver_init(void)
-
 {
     int err;
     int i;    
 
     PDEBUG("nf10_eth_driver_init(): loading ethernet driver\n");
-
-    /* Register the pci_driver. 
-     * Note: This will succeed even without a card installed in the system. */
-    err = pci_register_driver(&nf10_pci_driver);
-    if(err != 0) {
-        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register nf10_pci_driver... unloading driver\n");
-        return err;
-    } else
-        PDEBUG("nf10_eth_driver_init(): pci_register_driver... victory!\n");
 
     /* Allocate the network interfaces. */
     for(i = 0; i < NUM_NETDEVS; i++) {
@@ -1682,10 +1676,15 @@ static int __init nf10_eth_driver_init(void)
 
     /* Enable NAPI. */
     napi_enable(&nf10_napi_struct);
- 
-    /* Start the polling timer for receiving packets. */
-    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
-    add_timer(&rx_poll_timer);
+
+     /* Register the pci_driver. 
+     * Note: This will succeed even without a card installed in the system. */
+    err = pci_register_driver(&nf10_pci_driver);
+    if(err != 0) {
+        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to register nf10_pci_driver... unloading driver\n");
+        return err;
+    } else
+        PDEBUG("nf10_eth_driver_init(): pci_register_driver... victory!\n");
 
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Loaded.\n");
     
