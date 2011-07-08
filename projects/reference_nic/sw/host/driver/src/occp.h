@@ -42,7 +42,8 @@ typedef struct {
 		lastConfig;
 	uint32_t
 		clearError,
-		reserved[4];
+        pageWindow,
+		reserved[3];
 } OccpWorkerRegisters;
 
 #define OCCP_CONTROL_ENABLE 0x80000000

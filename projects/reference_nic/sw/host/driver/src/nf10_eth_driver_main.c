@@ -129,9 +129,16 @@ static const struct net_device_ops nf10_netdev_ops = {
 #define WORKER_SMA0     2
 #define WORKER_BIAS     3
 #define WORKER_SMA1     4
+#define WORKER_NF10     0
 
 /* FIXME: ought to think about this some more... what does timeout actually mean? */
 #define OCCP_LOG_TIMEOUT    4
+
+/* Pointer to OCPI register space for the NF10 design. */
+uint32_t            *nf10_regs;
+
+/* Pointer to OCPI control space for the NF10 design. */
+OccpWorkerRegisters *nf10_ctrl;
 
 /* Define our attributes policy array. The array index is the attribute number,
  * and the value is a policy for that attribute type. The policy simply states
@@ -402,7 +409,10 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     void            *msg_reply;
     int             err;
     uint32_t        reg_addr;
+    uint32_t        reg_addr_page;
+    uint32_t        reg_addr_offset;
     uint32_t        reg_val;
+    
 
     /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
      * the right data structures have actually been initialized and so on... */ 
@@ -439,10 +449,19 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
         return 0;
     }
 
-    reg_addr = *(uint32_t*)nla_data(na);
+    /* Calculate page and offset. */
+    reg_addr        = *(uint32_t*)nla_data(na);
+    reg_addr_page   = reg_addr / OCCP_WORKER_CONFIG_SIZE;
+    reg_addr_offset = reg_addr % OCCP_WORKER_CONFIG_SIZE;
 
-    /* FIXME: Get the reg value here. */
-    reg_val = 42;
+    /* Set page register. */
+    nf10_ctrl->pageWindow = reg_addr_page;
+    
+    /* Make sure the page register is written before we read from the register space. */
+    mb();
+
+    /* Go get the register value! */
+    reg_val = nf10_regs[reg_addr_offset];
 
     /* Put the reg value in the reply. */
     err = nla_put_u32(  skb_reply, 
@@ -464,9 +483,12 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     }
 
     PDEBUG("genl_cmd_reg_rd(): Register read operation info:\n"
-        "\tRegister address:\t0x%08x\n"
+        "\tRegister page:\t\t0x%08x\n"
+        "\tRegister offset:\t0x%08x\n"
         "\tRegister value:\t\t0x%08x\n",
-        reg_addr, reg_val);    
+        reg_addr_page, 
+        reg_addr_offset,
+        reg_val);    
 
     return 0;
 }
@@ -477,6 +499,7 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
 {
     struct nlattr   *na_addr, *na_val;    
     uint32_t        reg_addr, reg_val;
+    uint32_t        reg_addr_page, reg_addr_offset;
 
     /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
      * the right data structures have actually been initialized and so on... */ 
@@ -512,15 +535,30 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
         return 0;
     }
 
-    reg_addr = *(uint32_t*)nla_data(na_addr);
+    /* Calculate page and offset. */
+    reg_addr        = *(uint32_t*)nla_data(na_addr);
+    reg_addr_page   = reg_addr / OCCP_WORKER_CONFIG_SIZE;
+    reg_addr_offset = reg_addr % OCCP_WORKER_CONFIG_SIZE;
+    
+    /* Get value to write. */
     reg_val = *(uint32_t*)nla_data(na_val);
 
-    PDEBUG("genl_cmd_reg_wr(): Register write operation info:\n"
-        "\tRegister address:\t0x%08x\n"
-        "\tRegister value:\t\t0x%08x\n",
-        reg_addr, reg_val);    
+    /* Set page register. */
+    nf10_ctrl->pageWindow = reg_addr_page;
+    
+    /* Make sure the page register is written before we write to the register space. */
+    mb();
 
-    /* FIXME: fill in the code here to do the write. */
+    /* Go write the register value! */
+    nf10_regs[reg_addr_offset] = reg_val;
+
+    PDEBUG("genl_cmd_reg_wr(): Register write operation info:\n"
+        "\tRegister page:\t\t0x%08x\n"
+        "\tRegister offset:\t0x%08x\n"
+        "\tRegister value:\t\t0x%08x\n",
+        reg_addr_page, 
+        reg_addr_offset,
+        reg_val);    
 
     return 0;
 }
@@ -1162,20 +1200,30 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
      * registers that it is. Once we setup this structure, then we proceed to reset,
      * initialize, and then start the hardware components. */
 
-    occp         = (OccpSpace *)bar0_base_va;
+    occp        = (OccpSpace *)bar0_base_va;
 
-    dp0_props    = (OcdpProperties *)occp->config[WORKER_DP0];
-    dp1_props    = (OcdpProperties *)occp->config[WORKER_DP1];
-    sma0_props    = (uint32_t *)occp->config[WORKER_SMA0];
-    sma1_props    = (uint32_t *)occp->config[WORKER_SMA1];
-    bias_props    = (uint32_t *)occp->config[WORKER_BIAS];
-        
+    dp0_props   = (OcdpProperties *)occp->config[WORKER_DP0];
+    dp1_props   = (OcdpProperties *)occp->config[WORKER_DP1];
+    sma0_props  = (uint32_t *)occp->config[WORKER_SMA0];
+    sma1_props  = (uint32_t *)occp->config[WORKER_SMA1];
+    bias_props  = (uint32_t *)occp->config[WORKER_BIAS];
+    
     dp0_regs    = &occp->worker[WORKER_DP0].control,
     dp1_regs    = &occp->worker[WORKER_DP1].control,
-    sma0_regs    = &occp->worker[WORKER_SMA0].control,
-    sma1_regs    = &occp->worker[WORKER_SMA1].control,
-    bias_regs    = &occp->worker[WORKER_BIAS].control;
+    sma0_regs   = &occp->worker[WORKER_SMA0].control,
+    sma1_regs   = &occp->worker[WORKER_SMA1].control,
+    bias_regs   = &occp->worker[WORKER_BIAS].control;
 
+    /* For NF10 register access and control.
+     * Please forgive my blatant violation of naming consistency. Props and regs
+     * just don't make sense for this particular context. */
+    /* Note: nf10_regs is a pointer to a 1MB register region. It is used in conjunction 
+     * with a 12-bit page register in nf10_ctrl to access up to 4GB of registers. See 
+     * genl_cmd_reg_rd and genl_cmd_reg_wr to see how to use these to read and write
+     * registers in an NF10 design in a 32-bit register address space. */
+    nf10_regs   = (uint32_t *)occp->config[WORKER_NF10];
+    nf10_ctrl   = &occp->worker[WORKER_NF10].control;
+ 
     /* Reset workers. */
 
     /* Assert reset. */
@@ -1445,6 +1493,7 @@ void nf10_netdev_init(struct net_device *netdev)
 
 /* Initialization. */
 static int __init nf10_eth_driver_init(void)
+
 {
     int err;
     int i;    
