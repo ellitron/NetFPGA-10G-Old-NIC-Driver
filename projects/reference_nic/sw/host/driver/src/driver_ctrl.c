@@ -128,8 +128,13 @@ static void usage(void)
 {
     printf("%s: NetFPGA-10G Ethernet driver management, control, and testing utility\n"
         "usage: %s [OPTIONS] COMMAND [ARG...]\n\n"
-        "  echo STRING      Send STRING to driver, driver echoes it back.\n"
-        "  dma_tx STRING    Transmit STRING to the hardware via DMA.\n",
+        "   echo STRING             Send STRING to driver, driver echoes it back.\n"
+        "   dma_tx STRING [OPCODE]  Transmit STRING to the hardware via DMA w/ optional OPCODE.\n"
+        "   dma_rx                  Pull out what's next in the DMA RX buffer and print it\n"
+        "   reg_rd ADDR             Read register at address ADDR\n"
+        "   reg_wr ADDR VAL         Write VAL to register at address ADDR\n"
+        "   napi_enable             Enable driver polling for RX packets\n"
+        "   napi_disable            Disable driver polling for RX packets\n",
         program_name, program_name);
 }
 
