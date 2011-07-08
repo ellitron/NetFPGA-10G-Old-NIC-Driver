@@ -75,9 +75,11 @@ static void driver_disconnect()
 static int nf10_reg_rd_recv_msg_cb(struct nl_msg *msg, void *arg)
 {
     struct nlmsghdr *nlh;
-    struct nlattr   *na;
+    struct nlattr   *na_regval;
+    struct nlattr   *na_errno;
     struct nlattr   *attrs[NF10_GENL_A_MAX + 1];
     uint32_t        *val_ptr;
+    int             err;
 
     val_ptr = (uint32_t*)arg;
 
@@ -85,16 +87,25 @@ static int nf10_reg_rd_recv_msg_cb(struct nl_msg *msg, void *arg)
 
     genlmsg_parse(nlh, 0, attrs, NF10_GENL_A_MAX, 0);
 
-    na = attrs[NF10_GENL_A_REGVAL32];
-    if(na) {
-        if(nla_data(na) == NULL)
-            return -NLE_NOATTR;
-        else {
-            *val_ptr = *(uint32_t*)nla_data(na);
-            return 0;
-        }
+    /* First, get the errno. */
+    na_errno = attrs[NF10_GENL_A_ERRNO];
+    if(na_errno && nla_data(na_errno)) {
+        err = *(int*)nla_data(na_errno);
+    } else {
+        return -NLE_NOATTR;
+    }
+
+    /* If there was an error, pass is up. */
+    if(err)
+        return err;
+
+    /* Passed error check, get register value. */
+    na_regval = attrs[NF10_GENL_A_REGVAL32];
+    if(na_regval && nla_data(na_regval)) {
+        *val_ptr = *(uint32_t*)nla_data(na_regval);
+        return 0;
     } else 
-        return -NLE_MISSING_ATTR;
+        return -NLE_NOATTR;
 }
 
 int nf10_reg_rd(uint32_t addr, uint32_t *val_ptr)
@@ -122,25 +133,42 @@ int nf10_reg_rd(uint32_t addr, uint32_t *val_ptr)
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
     err = nl_send_auto(nf10_genl_sock, msg);
-    if(err < 0)
+    if(err < 0) {
+        driver_disconnect();
         return err;
+    }
 
     nlmsg_free(msg);
 
     nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, nf10_reg_rd_recv_msg_cb, (void*)val_ptr);
     
     err = nl_recvmsgs_default(nf10_genl_sock);
-    if(err)
-        return err;
 
     driver_disconnect();    
 
-    return 0;
+    return err;
 }
 
 static int nf10_reg_wr_recv_ack_cb(struct nl_msg *msg, void *arg)
 {
-    return 0;
+    struct nlmsghdr *nlh;
+    struct nlattr   *na_errno;
+    struct nlattr   *attrs[NF10_GENL_A_MAX + 1];
+    int             err;
+
+    nlh = nlmsg_hdr(msg);
+
+    genlmsg_parse(nlh, 0, attrs, NF10_GENL_A_MAX, 0);
+
+    /* Get the errno. */
+    na_errno = attrs[NF10_GENL_A_ERRNO];
+    if(na_errno && nla_data(na_errno)) {
+        err = *(int*)nla_data(na_errno);
+    } else {
+        return -NLE_NOATTR;
+    }
+
+    return err;
 }
 
 int nf10_reg_wr(uint32_t addr, uint32_t val)
@@ -169,8 +197,10 @@ int nf10_reg_wr(uint32_t addr, uint32_t val)
      * and also add an NLM_F_REQUEST flag. It will also add an NLM_F_ACK
      * flag unless the netlink socket has the NL_NO_AUTO_ACK flag set. */
     err = nl_send_auto(nf10_genl_sock, msg);
-    if(err < 0)
+    if(err < 0) {
+        driver_disconnect();
         return err;
+    }
 
     nlmsg_free(msg);
 
@@ -180,7 +210,9 @@ int nf10_reg_wr(uint32_t addr, uint32_t val)
      * seem to wait for the ACK to be received... Ideally we'd have the behavior that getting an 
      * ACK tells us everything is OK, otherwise we time out on waiting for an ACK and tell this
      * to the user. */
-    nl_recvmsgs_default(nf10_genl_sock);
+    err = nl_recvmsgs_default(nf10_genl_sock);
 
     driver_disconnect();    
+
+    return err;
 }

@@ -408,12 +408,11 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     struct nlattr   *na;    
     struct sk_buff  *skb_reply;
     void            *msg_reply;
-    int             err;
+    int             err = 0;
     uint32_t        reg_addr;
     uint32_t        reg_addr_page;
     uint32_t        reg_addr_offset;
-    uint32_t        reg_val;
-    
+    uint32_t        reg_val;    
 
     /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
      * the right data structures have actually been initialized and so on... */ 
@@ -442,14 +441,13 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     if(na) {
         if(nla_data(na) == NULL) {
             printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address attribute has no data\n", driver_name);
-            /* FIXME: need to free data structures! */
-            return 0;
+            err = -1;
+            goto send_error;
         }
-    } 
-    else {
+    } else {
         printk(KERN_WARNING "%s: genl_cmd_reg_rd(): no address attribute in generic netlink command\n", driver_name);
-        /* FIXME: need to free data structures! */
-        return 0;
+        err = -1;
+        goto send_error;
     }
 
     /* Calculate page and offset. */
@@ -459,10 +457,9 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
 
     /* Check that offset is 4B word aligned. */
     if(reg_addr_offset % 4) {
-        /* Abort! */
         printk(KERN_WARNING "%s: genl_cmd_reg_rd(): address not 4B word aligned (0x%08x)... aborting read operation.\n", driver_name, reg_addr);
-        /* FIXME: need to free data structures! */
-        return 0;
+        err = -1;
+        goto send_error;
     }
 
     /* Set page register. */
@@ -474,15 +471,34 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     /* Go get the register value! */
     reg_val = nf10_regs[reg_addr_offset];
 
+    PDEBUG("genl_cmd_reg_rd(): Register read operation info:\n"
+        "\tRegister page:\t\t0x%08x\n"
+        "\tRegister offset:\t0x%08x\n"
+        "\tRegister value:\t\t0x%08x\n",
+        reg_addr_page, 
+        reg_addr_offset,
+        reg_val);
+
     /* Put the reg value in the reply. */
     err = nla_put_u32(  skb_reply, 
                         NF10_GENL_A_REGVAL32, 
                         reg_val);
     if(err != 0) {
         printk(KERN_WARNING "%s: genl_cmd_reg_rd(): couldn't add register value to generic netlink msg\n", driver_name);
-            /* FIXME: We need to free the allocated data structures! */
-        return err;
+        goto send_error;
     }
+
+/* This is where we send back an errno to report back the status of the operation. */
+send_error:
+    
+    err = nla_put_u32(  skb_reply,
+                        NF10_GENL_A_ERRNO,
+                        err);
+    if(err != 0) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_rd(): couldn't add errno attribute to generic netlink msg\n", driver_name);
+        /* FIXME: We need to free the allocated data structures! */
+        return err;
+    }    
 
     genlmsg_end(skb_reply, msg_reply);
 
@@ -491,15 +507,7 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
         printk(KERN_WARNING "%s: genl_cmd_reg_rd(): couldn't send back reply\n", driver_name);
         /* FIXME: do we need to free allocated data structures here? */
         return err;
-    }
-
-    PDEBUG("genl_cmd_reg_rd(): Register read operation info:\n"
-        "\tRegister page:\t\t0x%08x\n"
-        "\tRegister offset:\t0x%08x\n"
-        "\tRegister value:\t\t0x%08x\n",
-        reg_addr_page, 
-        reg_addr_offset,
-        reg_val);    
+    }    
 
     return 0;
 }
@@ -509,8 +517,11 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
 int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
 {
     struct nlattr   *na_addr, *na_val;    
+    struct sk_buff  *skb_reply;
+    void            *msg_reply;    
     uint32_t        reg_addr, reg_val;
     uint32_t        reg_addr_page, reg_addr_offset;
+    int             err = 0;
 
     /* FIXME: it's possible to call this function even when there's no hardware, need to check that 
      * the right data structures have actually been initialized and so on... */ 
@@ -519,18 +530,33 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
         printk(KERN_WARNING "%s: genl_cmd_reg_wr(): info arg is NULL\n", driver_name);
         return -EINVAL;
     }
-    
+
+    /* Prepare a reply. */
+    skb_reply = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+    if(skb_reply == NULL) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): couldn't allocate the reply skb\n", driver_name);
+        return -ENOMEM;
+    }
+
+    msg_reply = genlmsg_put_reply(skb_reply, info, &nf10_genl_family, 0, NF10_GENL_C_REG_WR);
+    if(msg_reply == NULL) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): genlmsg_put_reply returned NULL\n", driver_name);
+        /* FIXME: need to free data structures! */
+        return 0; /* FIXME: What's the proper error code for this? */
+    }
+     
     /* Receive the address to write to. */
     na_addr = info->attrs[NF10_GENL_A_ADDR32];
     if(na_addr) {
         if(nla_data(na_addr) == NULL) {
             printk(KERN_WARNING "%s: genl_cmd_reg_wr(): address attribute has no data\n", driver_name);
-            return 0;
+            err = -1;
+            goto send_error;
         }
-    } 
-    else {
+    } else {
         printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no address attribute in generic netlink command\n", driver_name);
-        return 0;
+        err = -1;
+        goto send_error;
     }
 
     /* Receive the value to write. */
@@ -538,12 +564,13 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
     if(na_val) {
         if(nla_data(na_val) == NULL) {
             printk(KERN_WARNING "%s: genl_cmd_reg_wr(): register value attribute has no data\n", driver_name);
-            return 0;
+            err = -1;
+            goto send_error;
         }
-    }
-    else {
+    } else {
         printk(KERN_WARNING "%s: genl_cmd_reg_wr(): no register value attribute in generic netlink command\n", driver_name);
-        return 0;
+        err = -1;
+        goto send_error;
     }
 
     /* Calculate page and offset. */
@@ -553,9 +580,9 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
 
     /* Check that offset is 4B word aligned. */
     if(reg_addr_offset % 4) {
-        /* Abort! */
         printk(KERN_WARNING "%s: genl_cmd_reg_wr(): address not 4B word aligned (0x%08x)... aborting write operation.\n", driver_name, reg_addr);
-        return 0;
+        err = -1;
+        goto send_error;
     }
     
     /* Get value to write. */
@@ -577,6 +604,27 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
         reg_addr_page, 
         reg_addr_offset,
         reg_val);    
+
+/* This is where we send back an errno to report back the status of the operation. */
+send_error:
+    
+    err = nla_put_u32(  skb_reply,
+                        NF10_GENL_A_ERRNO,
+                        err);
+    if(err != 0) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): couldn't add errno attribute to generic netlink msg\n", driver_name);
+        /* FIXME: We need to free the allocated data structures! */
+        return err;
+    }    
+
+    genlmsg_end(skb_reply, msg_reply);
+
+    err = genlmsg_reply(skb_reply, info);
+    if(err != 0) {
+        printk(KERN_WARNING "%s: genl_cmd_reg_wr(): couldn't send back reply\n", driver_name);
+        /* FIXME: do we need to free allocated data structures here? */
+        return err;
+    }
 
     return 0;
 }
