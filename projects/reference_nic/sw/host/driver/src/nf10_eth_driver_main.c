@@ -144,6 +144,9 @@ uint32_t            *nf10_regs;
 /* Pointer to OCPI control space for the NF10 design. */
 OccpWorkerRegisters *nf10_ctrl;
 
+/* Variable used for keeping track of the hardware state. */
+uint32_t    hw_state = 0;
+
 /* Define our attributes policy array. The array index is the attribute number,
  * and the value is a policy for that attribute type. The policy simply states
  * the type of data that attributes of that type are allowed to contain
@@ -1130,6 +1133,9 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
     
     printk(KERN_INFO "nf10_eth_driver: Found NetFPGA-10G device with vendor_id: 0x%4x, device_id: 0x%4x\n", id->vendor, id->device);    
 
+    /* The hardware has been found. */
+    hw_state |= HW_FOUND;
+
     /* Enable the device. pci_enable_device() will do the following (ref. PCI/pci.txt kernel doc):
      *     - wake up the device if it was in suspended state
      *     - allocate I/O and memory regions of the device (if BIOS did not)
@@ -1512,7 +1518,10 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         pci_disable_device(pdev);    
         return err;
     }
-   
+  
+    /* Hardware has been successfully initialized. */
+    hw_state |= HW_INIT;
+ 
     /* Start the polling timer for receiving packets. */
     rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
     add_timer(&rx_poll_timer);
@@ -1685,6 +1694,12 @@ static int __init nf10_eth_driver_init(void)
         return err;
     } else
         PDEBUG("nf10_eth_driver_init(): pci_register_driver... victory!\n");
+
+    /* Check the hardware state. */
+    if(!(hw_state & HW_FOUND))
+        printk(KERN_WARNING "nf10_eth_driver: WARNING: A NetFPGA-10G device was not found during driver loading...\n");
+    else if(!(hw_state & HW_INIT))
+        printk(KERN_WARNING "nf10_eth_driver: WARNING: A NetFPGA-10G device was found but could not be properly initialized... driver may be in an unstable state\n");
 
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Loaded.\n");
     

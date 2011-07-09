@@ -43,4 +43,8 @@
 #define OPCODE_MAC3     0x00000040
 #define OPCODE_MAC_ALL  0x00000055
 
+/* Hardware state flags. */
+#define HW_FOUND        0x00000001
+#define HW_INIT         0x00000002
+
 #endif /* NF10_ETH_DRIVER_H */
