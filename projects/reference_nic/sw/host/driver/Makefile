@@ -29,7 +29,7 @@ nf10_reg_lib:
 	$(MAKE) nf10_reg_lib -C $(BUILD)/$(DATE)
 	cp $(BUILD)/$(DATE)/libnf10reg.so.1.0 $(BIN)/
 	
-install:
+install_nf10_reg_lib:
 	cp $(BIN)/libnf10reg.so.1.0 /usr/local/lib
 	ln -sf /usr/local/lib/libnf10reg.so.1.0 /usr/local/lib/libnf10reg.so
 	ln -sf /usr/local/lib/libnf10reg.so.1.0 /usr/local/lib/libnf10reg.so.1
