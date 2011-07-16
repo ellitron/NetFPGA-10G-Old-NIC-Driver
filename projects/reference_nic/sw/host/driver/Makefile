@@ -14,6 +14,21 @@ all:
 	cp $(BUILD)/$(DATE)/driver_ctrl $(BIN)/
 	cp $(BUILD)/$(DATE)/libnf10reg.so.1.0 $(BIN)/
 
+nf10_eth_driver:
+	cp -r $(SRC)/ $(BUILD)/$(DATE)
+	$(MAKE) nf10_eth_driver -C $(BUILD)/$(DATE)
+	cp $(BUILD)/$(DATE)/nf10_eth_driver.ko $(BIN)/
+
+driver_ctrl:
+	cp -r $(SRC)/ $(BUILD)/$(DATE)
+	$(MAKE) driver_ctrl -C $(BUILD)/$(DATE)
+	cp $(BUILD)/$(DATE)/driver_ctrl $(BIN)/
+
+nf10_reg_lib:
+	cp -r $(SRC)/ $(BUILD)/$(DATE)
+	$(MAKE) nf10_reg_lib -C $(BUILD)/$(DATE)
+	cp $(BUILD)/$(DATE)/libnf10reg.so.1.0 $(BIN)/
+	
 install:
 	cp $(BIN)/libnf10reg.so.1.0 /usr/local/lib
 	ln -sf /usr/local/lib/libnf10reg.so.1.0 /usr/local/lib/libnf10reg.so
