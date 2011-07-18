@@ -1571,9 +1571,6 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
 
 void nf10_netdev_init(struct net_device *netdev)
 {
-    int         iface;
-    char        mac_addr[ETH_ALEN+1]; 
-
     PDEBUG("nf10_netdev_init(): Initializing nf10_netdev\n");    
 
     ether_setup(netdev);
@@ -1581,30 +1578,14 @@ void nf10_netdev_init(struct net_device *netdev)
     netdev->netdev_ops = &nf10_netdev_ops;
 
     netdev->watchdog_timeo = 5 * HZ;
-   
-    /* Zero out the mac address. */
-    memset(mac_addr, 0, ETH_ALEN+1);
- 
-    iface = get_iface_from_netdev(netdev);
-    if(iface < 0) {
-        printk(KERN_ERR "%s: ERROR: nf10_netdev_init(): could not determine interface number from netdev argument\n", driver_name);
-        /* In this case leave MAC as zeros */
-        memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
-    } else {
-        /* Little tricky here. First octect needs to be \0 for unicast and 
-         * global uniqueness bits to be set correctly. Since \0 is the NULL
-         * terminator, however, can't have that in the snprintf format 
-         * string, so we move past it by 1 for the snprintf call. */
-        snprintf(&mac_addr[1], ETH_ALEN, "NF%d", iface);
-        memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
-    }
 }
 
 /* Initialization. */
 static int __init nf10_eth_driver_init(void)
 {
-    int err;
-    int i;    
+    char    mac_addr[ETH_ALEN+1];
+    int     err;
+    int     i;    
 
     PDEBUG("nf10_eth_driver_init(): loading ethernet driver\n");
 
@@ -1623,6 +1604,15 @@ static int __init nf10_eth_driver_init(void)
     }
 
     PDEBUG("nf10_eth_driver_init(): allocating netdevs... victory!\n");
+
+    /* Set network interface MAC addresses. */
+    for(i = 0; i < NUM_NETDEVS; i++) {
+        memset(mac_addr, 0, ETH_ALEN+1);
+        snprintf(&mac_addr[1], ETH_ALEN, "NF%d", i);
+        memcpy(nf10_netdevs[i]->dev_addr, mac_addr, ETH_ALEN);
+    }
+    
+    PDEBUG("nf10_eth_driver_init(): setting netdev MAC addresses... victory!\n");
 
     /* Add NAPI structure to the device. */
     /* Since we have NUM_NETDEVS net_devices, we just use the 1st one for implementing polling. */ 
