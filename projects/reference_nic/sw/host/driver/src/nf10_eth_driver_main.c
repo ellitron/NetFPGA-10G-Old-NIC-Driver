@@ -1571,7 +1571,7 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
 
 void nf10_netdev_init(struct net_device *netdev)
 {
-    uint32_t    iface;
+    int         iface;
     char        mac_addr[ETH_ALEN+1]; 
 
     PDEBUG("nf10_netdev_init(): Initializing nf10_netdev\n");    
