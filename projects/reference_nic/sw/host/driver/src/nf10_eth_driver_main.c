@@ -1591,8 +1591,11 @@ void nf10_netdev_init(struct net_device *netdev)
         /* In this case leave MAC as zeros */
         memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
     } else {
-        /* NULL terminator counts towards size limit (thus need ETH_ALEN+1) */
-        snprintf(mac_addr, ETH_ALEN + 1, "\0NF%d", iface)
+        /* Little tricky here. First octect needs to be \0 for unicast and 
+         * global uniqueness bits to be set correctly. Since \0 is the NULL
+         * terminator, however, can't have that in the snprintf format 
+         * string, so we move past it by 1 for the snprintf call. */
+        snprintf(&mac_addr[1], ETH_ALEN, "NF%d", iface);
         memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
     }
 }
