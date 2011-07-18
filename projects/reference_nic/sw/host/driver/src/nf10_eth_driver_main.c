@@ -1571,16 +1571,30 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
 
 void nf10_netdev_init(struct net_device *netdev)
 {
+    uint32_t    iface;
+    char        mac_addr[ETH_ALEN+1]; 
+
     PDEBUG("nf10_netdev_init(): Initializing nf10_netdev\n");    
-   
+
     ether_setup(netdev);
 
     netdev->netdev_ops = &nf10_netdev_ops;
 
     netdev->watchdog_timeo = 5 * HZ;
-    
-    /* FIXME: Need to pull real MAC address from hardware. */
-    memcpy(netdev->dev_addr, "\0NET10", ETH_ALEN);
+   
+    /* Zero out the mac address. */
+    memset(mac_addr, 0, ETH_ALEN+1);
+ 
+    iface = get_iface_from_netdev(netdev);
+    if(iface < 0) {
+        printk(KERN_ERR "%s: ERROR: nf10_netdev_init(): could not determine interface number from netdev argument\n", driver_name);
+        /* In this case leave MAC as zeros */
+        memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
+    } else {
+        /* NULL terminator counts towards size limit (thus need ETH_ALEN+1) */
+        snprintf(mac_addr, ETH_ALEN + 1, "\0NF%d", iface)
+        memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
+    }
 }
 
 /* Initialization. */
