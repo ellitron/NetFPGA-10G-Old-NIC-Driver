@@ -475,7 +475,7 @@ int genl_cmd_reg_rd(struct sk_buff *skb, struct genl_info *info)
     mb();
 
     /* Go get the register value! */
-    reg_val = nf10_regs[reg_addr_offset];
+    reg_val = nf10_regs[(reg_addr_offset >> 2)];
 
     PDEBUG("genl_cmd_reg_rd(): Register read operation info:\n"
         "\tRegister page:\t\t0x%08x\n"
