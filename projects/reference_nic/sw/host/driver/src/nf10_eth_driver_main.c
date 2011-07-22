@@ -1256,7 +1256,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
          * the allocation fails, which is unnecessary since we print our own msg. */
         tx_dma_reg_va = dma_alloc_coherent(&pdev->dev, dma_region_size, &tx_dma_reg_pa, GFP_KERNEL | __GFP_NOWARN);
         if(tx_dma_reg_va == NULL) {
-            printk(KERN_INFO "nf10_eth_driver: INFO: probe(): failed to alloc TX DMA region of size %d bytes... trying less\n", dma_region_size);
+            PDEBUG("probe(): failed to alloc TX DMA region of size %d bytes... trying less\n", dma_region_size);
             /* Try smaller allocation. */
             continue;
         }
@@ -1265,7 +1265,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         rx_dma_reg_va = dma_alloc_coherent(&pdev->dev, dma_region_size, &rx_dma_reg_pa, GFP_KERNEL | __GFP_NOWARN);
         if(rx_dma_reg_va == NULL) {
             /* FIXME: replace all nf10_eth_driver with driver_name string in format. */
-            printk(KERN_INFO "nf10_eth_driver: INFO: probe(): failed to alloc RX DMA region of size %d bytes... trying less\n", dma_region_size);
+            PDEBUG("probe(): failed to alloc RX DMA region of size %d bytes... trying less\n", dma_region_size);
             dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
             /* Try smaller allocation. */
             continue;
