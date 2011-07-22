@@ -1376,12 +1376,12 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
     }
 
     if(bias_regs->initialize != OCCP_SUCCESS_RESULT) {
-        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for bias worker\n", driver_name);
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for BIAS worker\n", driver_name);
         err = -1;
     }
     
     if(nf10_ctrl->initialize != OCCP_SUCCESS_RESULT) {
-        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for nf10 worker\n", driver_name);
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for NF10 worker\n", driver_name);
         err = -1;
     }
 
