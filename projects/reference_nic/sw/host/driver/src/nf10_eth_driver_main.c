@@ -606,7 +606,7 @@ int genl_cmd_reg_wr(struct sk_buff *skb, struct genl_info *info)
     mb();
 
     /* Go write the register value! */
-    nf10_regs[reg_addr_offset] = reg_val;
+    nf10_regs[(reg_addr_offset >> 2)] = reg_val;
 
     PDEBUG("genl_cmd_reg_wr(): Register write operation info:\n"
         "\tRegister page:\t\t0x%08x\n"
