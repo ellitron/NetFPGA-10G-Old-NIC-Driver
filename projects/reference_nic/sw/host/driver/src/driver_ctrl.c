@@ -383,7 +383,7 @@ static void do_reg_rd(int argc, char* argv[])
 {
     struct nl_msg   *msg;
     int             err;  
-    uint32_t        *val_ptr; 
+    uint32_t        retval; 
 
     err = driver_connect();
     if(err != 0) {
@@ -417,13 +417,13 @@ static void do_reg_rd(int argc, char* argv[])
 
     nlmsg_free(msg);
 
-    nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, do_reg_rd_recv_msg_cb, (void*)val_ptr);
+    nl_socket_modify_cb(nf10_genl_sock, NL_CB_VALID, NL_CB_CUSTOM, do_reg_rd_recv_msg_cb, (void*)&retval);
     
     err = nl_recvmsgs_default(nf10_genl_sock);
     if(err)
         printf("ERROR: do_reg_rd(): driver reported back an error\n");
     else
-        printf("0x%08x\n", *val_ptr);
+        printf("0x%08x\n", retval);
     
     driver_disconnect();    
 }
