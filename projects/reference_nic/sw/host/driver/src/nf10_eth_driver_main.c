@@ -63,7 +63,7 @@ void        tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.0.0"
+#define NF10_ETH_DRIVER_VERSION     "1.1.0"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
