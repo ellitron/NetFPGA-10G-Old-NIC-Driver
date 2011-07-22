@@ -383,7 +383,7 @@ int genl_cmd_dma_rx(struct sk_buff *skb, struct genl_info *info)
     
         PDEBUG("genl_cmd_dma_rx(): DMA RX operation info:\n"
             "\tBytes of data received:\t%d\n"
-            "\tOpcode received:\t\t0x%08x\n"
+            "\tOpcode received:\t0x%08x\n"
             "\tFrom buffer number:\t%d\n",
             rx_dma_stream.metadata[rx_dma_stream.buf_index].length, 
             rx_dma_stream.metadata[rx_dma_stream.buf_index].opCode,
@@ -830,13 +830,17 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
      * temporary check */
     /* Also wondering for len... if the preamble/FCS are included. */
     if(len < ETH_ZLEN || len > ETH_FRAME_LEN) {
-        PDEBUG("nf10_ndo_start_xmit(): packet length %d out of bounds [%d, %d]. Sending anyway.\n", len, ETH_ZLEN, ETH_FRAME_LEN);
+        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d out of the bounds supported by the hardware [%d, %d]. Dropping the packet...\n", len, ETH_ZLEN, ETH_FRAME_LEN);
+        netdev->stats.tx_dropped++;
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
     }
 
     /* Check length against the DMA buffer size. */
     if(len > DMA_BUF_SIZE) {
         printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d greater than buffer size %d\n", driver_name, len, DMA_BUF_SIZE);
-        netdev->stats.tx_dropped++;;
+        netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
@@ -847,6 +851,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
         printk(KERN_WARNING "%s: WARNING: nf10_ndo_start_xmit(): trying to send packet but hardware was not found or was not initialized properly... dropping\n", driver_name);
         netdev->stats.tx_dropped++; 
         dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
     
