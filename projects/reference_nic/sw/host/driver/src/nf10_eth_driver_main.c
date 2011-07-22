@@ -830,7 +830,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
      * temporary check */
     /* Also wondering for len... if the preamble/FCS are included. */
     if(len < ETH_ZLEN || len > ETH_FRAME_LEN) {
-        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d out of the bounds supported by the hardware [%d, %d]. Dropping the packet...\n", len, ETH_ZLEN, ETH_FRAME_LEN);
+        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d out of the bounds supported by the hardware [%d, %d]. Dropping the packet...\n", driver_name, len, ETH_ZLEN, ETH_FRAME_LEN);
         netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
         /* FIXME: not really sure of the right return value in this case... */
