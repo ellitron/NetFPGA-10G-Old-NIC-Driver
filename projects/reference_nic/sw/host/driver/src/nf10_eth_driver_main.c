@@ -45,6 +45,7 @@ static int                      nf10_ndo_stop(struct net_device *netdev);
 static netdev_tx_t              nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev);
 static void                     nf10_ndo_tx_timeout(struct net_device *netdev);
 static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev);
+static int                      nf10_ndo_set_mac_address(struct net_device *netdev, void *addr);
 
 static int                      nf10_napi_struct_poll(struct napi_struct *napi, int budget);
 
@@ -125,6 +126,7 @@ static const struct net_device_ops nf10_netdev_ops = {
     .ndo_start_xmit         = nf10_ndo_start_xmit,
     .ndo_tx_timeout         = nf10_ndo_tx_timeout,
     .ndo_get_stats          = nf10_ndo_get_stats,
+    .ndo_set_mac_address    = nf10_ndo_set_mac_address,
 };
 
 /* OpenCPI */
@@ -1111,6 +1113,17 @@ static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev)
     return &netdev->stats;
 }
 
+static int nf10_ndo_set_mac_address(struct net_device *netdev, void *addr)
+{ 
+    struct sockaddr *saddr = addr;
+    
+    if(!is_valid_ether_addr(saddr->sa_data))
+        return -EADDRNOTAVAIL;
+
+    memcpy(netdev->dev_addr, saddr->sa_data, netdev->addr_len);    
+
+    return 0;
+}
 
 /* When the kernel finds a device with a vendor and device ID associated with this driver
  * it will invoke this function. The job of this function is really to initialize the 
@@ -1586,9 +1599,9 @@ void nf10_netdev_init(struct net_device *netdev)
 /* Initialization. */
 static int __init nf10_eth_driver_init(void)
 {
-    char    mac_addr[ETH_ALEN+1];
-    int     err;
-    int     i;    
+    uint32_t    mac_addr_len;
+    int         err;
+    int         i;    
 
     PDEBUG("nf10_eth_driver_init(): loading ethernet driver\n");
 
@@ -1607,12 +1620,15 @@ static int __init nf10_eth_driver_init(void)
     }
 
     PDEBUG("nf10_eth_driver_init(): allocating netdevs... victory!\n");
+    
+    mac_addr_len = nf10_netdevs[0]->addr_len;
+    char mac_addr[mac_addr_len+1];
 
     /* Set network interface MAC addresses. */
     for(i = 0; i < NUM_NETDEVS; i++) {
-        memset(mac_addr, 0, ETH_ALEN+1);
-        snprintf(&mac_addr[1], ETH_ALEN, "NF%d", i);
-        memcpy(nf10_netdevs[i]->dev_addr, mac_addr, ETH_ALEN);
+        memset(mac_addr, 0, mac_addr_len+1);
+        snprintf(&mac_addr[1], mac_addr_len, "NF%d", i);
+        memcpy(nf10_netdevs[i]->dev_addr, mac_addr, mac_addr_len);
     }
     
     PDEBUG("nf10_eth_driver_init(): setting netdev MAC addresses... victory!\n");
