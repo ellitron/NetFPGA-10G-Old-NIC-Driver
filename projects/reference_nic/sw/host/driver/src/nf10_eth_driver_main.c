@@ -61,6 +61,9 @@ void        tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
 
 char driver_name[] = "nf10_eth_driver";
 
+/* Driver version. */
+#define NF10_ETH_DRIVER_VERSION     "1.0.0"
+
 /* Number of network devices. */
 #define NUM_NETDEVS 4
 
@@ -1708,7 +1711,7 @@ static int __init nf10_eth_driver_init(void)
     else if(!(hw_state & HW_INIT))
         printk(KERN_WARNING "nf10_eth_driver: WARNING: A NetFPGA-10G device was found but could not be properly initialized... driver may be in an unstable state\n");
 
-    printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Loaded.\n");
+    printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver version %s Loaded.\n", NF10_ETH_DRIVER_VERSION);
     
     return 0;
 }
