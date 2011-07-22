@@ -813,11 +813,11 @@ uint32_t get_iface_from_netdev(struct net_device *netdev)
 
 static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
-    void *data;
-    uint32_t len;
-    int waited;
-    int iface;
-    uint32_t opcode;
+    void        *data;
+    uint32_t    len;
+    int         waited;
+    int         iface;
+    uint32_t    opcode;
 
     PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");    
 
@@ -836,26 +836,36 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Check length against the DMA buffer size. */
     if(len > DMA_BUF_SIZE) {
         printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d greater than buffer size %d\n", driver_name, len, DMA_BUF_SIZE);
+        netdev->stats.tx_dropped++;;
         dev_kfree_skb(skb);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
 
+    /* Check that the hardware is actually there and working. */
+    if(!((hw_state & HW_FOUND) && (hw_state & HW_INIT))) {
+        printk(KERN_WARNING "%s: WARNING: nf10_ndo_start_xmit(): trying to send packet but hardware was not found or was not initialized properly\n", driver_name);
+        netdev->stats.tx_dropped++; 
+        dev_kfree_skb(skb);
+        return NETDEV_TX_OK;
+    }
+    
     /* Opcode for setting source and destination ports. */
     opcode = 0;
     iface = get_iface_from_netdev(netdev);
     if(iface < 0) {
         printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): could not determine source interface number from netdev\n", driver_name);
+        netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
     tx_set_src_iface(&opcode, iface); 
 
+    /* DMA the packet to the hardware. */
+
     /* Start the clock! */
     netdev->trans_start = jiffies;
-
-    /* DMA the packet to the hardware. */
 
     /* Wait for buffer to be free. */
     /* FIXME: Want to use netif_{stop,wake}_queue functions, except that presently we have
@@ -871,6 +881,8 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
 
     /* Copy message into buffer. */
     memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
+
+    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
 
     /* Fill out metadata. */
     /* Length. */
