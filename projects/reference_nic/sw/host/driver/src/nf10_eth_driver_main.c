@@ -1356,22 +1356,22 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
     /* FIXME: need to double check everything below for problems with ooe. */
 
     if(dp0_regs->initialize != OCCP_SUCCESS_RESULT) {
-        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for DP0\n", driver_name);
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for DP0 worker\n", driver_name);
         err = -1;
     }
     
     if(dp1_regs->initialize != OCCP_SUCCESS_RESULT) {
-        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for DP1\n", driver_name);
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for DP1 worker\n", driver_name);
         err = -1;
     }
 
     if(sma0_regs->initialize != OCCP_SUCCESS_RESULT) {
-        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for SMA0\n", driver_name);
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for SMA0 worker\n", driver_name);
         err = -1;
     }
 
     if(sma1_regs->initialize != OCCP_SUCCESS_RESULT) {
-        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for SMA1\n", driver_name);
+        printk(KERN_ERR "%s: ERROR: probe(): OpenCPI worker initialization failure for SMA1 worker\n", driver_name);
         err = -1;
     }
 
