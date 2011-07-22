@@ -844,7 +844,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
 
     /* Check that the hardware is actually there and working. */
     if(!((hw_state & HW_FOUND) && (hw_state & HW_INIT))) {
-        printk(KERN_WARNING "%s: WARNING: nf10_ndo_start_xmit(): trying to send packet but hardware was not found or was not initialized properly\n", driver_name);
+        printk(KERN_WARNING "%s: WARNING: nf10_ndo_start_xmit(): trying to send packet but hardware was not found or was not initialized properly... dropping\n", driver_name);
         netdev->stats.tx_dropped++; 
         dev_kfree_skb(skb);
         return NETDEV_TX_OK;
