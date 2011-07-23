@@ -252,6 +252,7 @@ static void do_dma_tx(int argc, char *argv[])
     msg = nlmsg_alloc();
     if(msg == NULL) {
         printf("ERROR: do_dma_tx(): could not allocate new netlink message\n");
+        /* FIXME: need to free the msg? */
         driver_disconnect();
         return;
     }
@@ -260,7 +261,14 @@ static void do_dma_tx(int argc, char *argv[])
     genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, nf10_genl_family, 0, 0,
             NF10_GENL_C_DMA_TX, NF10_GENL_FAMILY_VERSION);
 
-    nla_put_string(msg, NF10_GENL_A_MSG, argv[1]);
+    err = nla_put_string(msg, NF10_GENL_A_MSG, argv[1]);
+    if(err) {
+        printf("ERROR: do_dma_tx(): could not put string in netlink message\n");
+        /* FIXME: need to free the msg? */
+        driver_disconnect();
+        return;
+    }
+
     if(argc == 3)
         nla_put_u32(msg, NF10_GENL_A_OPCODE, (uint32_t)strtoull(argv[2], NULL, 0));
     else
