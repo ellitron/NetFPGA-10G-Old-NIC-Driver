@@ -825,12 +825,9 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     data = (void*)skb->data;
     len = skb->len;
 
-    /* FIXME: When hardware is ready, may need to insert code here to check that the length
-     * is within the limits of what the hardware can handle. For now I'll just use this 
-     * temporary check */
-    /* Also wondering for len... if the preamble/FCS are included. */
-    if(len < ETH_ZLEN || len > ETH_FRAME_LEN) {
-        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d out of the bounds supported by the hardware [%d, %d]. Dropping the packet...\n", driver_name, len, ETH_ZLEN, ETH_FRAME_LEN);
+    /* Check len against the bounds imposed by the raw hardware. */
+    if(len < NF10_PKT_SIZE_MIN || len > NF10_PKT_SIZE_MAX) {
+        printk(KERN_ERR "%s: ERROR: nf10_ndo_start_xmit(): packet length %d out of the bounds supported by the hardware [%d, %d]. Dropping the packet...\n", driver_name, len, NF10_PKT_SIZE_MIN, NF10_PKT_SIZE_MAX);
         netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
         /* FIXME: not really sure of the right return value in this case... */

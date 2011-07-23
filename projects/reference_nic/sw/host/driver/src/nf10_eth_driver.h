@@ -47,4 +47,8 @@
 #define HW_FOUND        0x00000001
 #define HW_INIT         0x00000002
 
+/* Hardware packet size bounds. */
+#define NF10_PKT_SIZE_MIN   33
+#define NF10_PKT_SIZE_MAX   8192
+
 #endif /* NF10_ETH_DRIVER_H */
