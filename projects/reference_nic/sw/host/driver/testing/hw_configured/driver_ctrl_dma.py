@@ -21,28 +21,24 @@ import random
 import string
 import subprocess
 
-MIN_BUFFER_SIZE = 32
-
 def usage(f = sys.stdout):
     print >> f, """
 Usage: %(progname)s buffer_size iterations
-    buffer_size     - Must be >= 64
+    bufsize_min     - Minimum buffer size
+    bufsize_max     - Maximum buffer size
     iterations      - Number of transfers to do
 """ % {
     "progname": sys.argv[0],
 }
 
 if __name__ == "__main__":
-    if(len(sys.argv) != 3):
+    if(len(sys.argv) != 4):
         usage()
         sys.exit()
 
-    buffer_size = int(sys.argv[1])
-    iterations = int(sys.argv[2])
-
-    if(buffer_size < MIN_BUFFER_SIZE):
-        usage()
-        sys.exit()
+    bufsize_min = int(sys.argv[1])
+    bufsize_max = int(sys.argv[2])
+    iterations = int(sys.argv[3])
 
     error = False
 
@@ -56,9 +52,9 @@ if __name__ == "__main__":
     msg_pattern = re.compile('msg:\s+(\w+)', re.DOTALL);
 
     for i in range(0, iterations):
-        strlen = random.randint(MIN_BUFFER_SIZE, buffer_size)
+        strlen = random.randint(bufsize_min, bufsize_max)
 
-        random_string = "".join(random.choice(string.letters + string.digits) for i in xrange(strlen)) 
+        random_string = "".join(random.choice(string.letters + string.digits) for i in xrange(strlen-1)) 
         random_opcode = 2**(2*random.randint(1,4)-1) 
  
         subprocess.call("../../bin/driver_ctrl dma_tx " + random_string + " " + str(random_opcode), shell=True) 
