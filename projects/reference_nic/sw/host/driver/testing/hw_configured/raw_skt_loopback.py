@@ -22,19 +22,22 @@ import time
 
 def usage(f = sys.stdout):
     print >> f, """
-Usage: %(progname)s pair1 pair2
-    pair1   - 2 digit #. Each digit represents a port.
-    pair2   - 2 digit #. Each digit represents a port.
+Usage: %(progname)s pair1 pair2 pktsize_min pktsize_max num_pkts
+    pair1       - 2 digit #. Each digit represents a port.
+    pair2       - 2 digit #. Each digit represents a port.
+    pktsize_min - Minimum packet size (bytes).
+    pktsize_max - Maximum packet size (bytes).
+    num_pkts    - Number of packets to send for each connection and direction.
 
 Example:
-    %(progname)s 12 34
-        Means 1<->2, and 3<->4
+    %(progname)s 01 23
+        Means 0<->1, and 2<->3
 """ % {
     "progname": sys.argv[0],
 }
 
 if __name__ == "__main__":
-    if(len(sys.argv) != 3):
+    if(len(sys.argv) != 6):
         usage()
         sys.exit()
 
@@ -44,7 +47,12 @@ if __name__ == "__main__":
     pair2_2 = int(sys.argv[2][1])
  
     pairs = ((pair1_1, pair1_2), (pair2_1, pair2_2))
- 
+
+    pktsize_min = int(sys.argv[3])
+    pktsize_max = int(sys.argv[4])
+
+    num_pkts = int(sys.argv[5])
+
     # Insert the driver.
     subprocess.call("sudo insmod ../../bin/nf10_eth_driver.ko", shell=True)
 
@@ -74,38 +82,52 @@ if __name__ == "__main__":
 
     macs = (nf0_mac, nf1_mac, nf2_mac, nf3_mac)
 
+    error = False
+
     # For each pair
-    for i in range(0, 2):
-        # Test one way
-        
+    for i in range(0, len(pairs)):
+        # For each direction
+        for j in range(0, 2):
+            src_iface = pairs[i][j%2]
+            dst_iface = pairs[i][(j+1)%2]
+            
+            print "Testing %d->%d with %d packets..."%(src_iface,dst_iface,num_pkts)
+            
+            # Generate the Ethernet header
+            tx_eth_hdr = struct.pack("!6s6sh", macs[src_iface], macs[dst_iface], proto)
+            
+            for k in range(0, num_pkts):
+                # Generate random payload
+                payload_len = random.randint(pktsize_min-len(tx_eth_hdr), pktsize_max-len(tx_eth_hdr))
+                tx_eth_payload = "".join(random.choice(string.letters + string.digits) for i in xrange(payload_len)) 
+            
+                # Put the two together...
+                tx_eth_pkt = tx_eth_hdr + tx_eth_payload
 
-        # Test the other way
+                # Send
+                socks[src_iface].send(tx_eth_pkt)
 
-    srcAddr = hwAddr
-    dstAddr = "\x01\x02\x03\x04\x05\x06"
-    ethData = "here is some data for an ethernet packet"
+                # Receive
+                rx_eth_pkt = socks[dst_iface].recv(pktsize_max)
+                
+                # If len(tx_eth_pkt) < 60 then it's a special case
+                # Hardware MAC extends pkts to min len 60 with 0 pad
+                # so do the same here in software before error checking
+                if(len(tx_eth_pkt) < 60):
+                    tx_eth_pkt += "".join("\0" for i in xrange(60-len(tx_eth_pkt)))
 
-    txFrame = struct.pack("!6s6sh",dstAddr,srcAddr,proto) + ethData
+                if(tx_eth_pkt != rx_eth_pkt):
+                    error = True
+                    print "ERROR: src: %d dst: %d pkt_num: %d --"%(src_iface,dst_iface,k)
+                    print "Tx[%d]: "%len(tx_eth_pkt) + string.join(["%02x"%ord(b) for b in tx_eth_pkt]," ")
+                    print "Rx[%d]: "%len(rx_eth_pkt) + string.join(["%02x"%ord(b) for b in rx_eth_pkt]," ")
+                
+    if(error):
+        print "Raw socket loopback test failed."
 
-    time.sleep(16)
+    for i in range(0, len(socks)):
+        socks[i].close()
     
-    print "Tx[%d]: "%len(ethData) + string.join(["%02x"%ord(b) for b in ethData]," ") 
-           
-    nf0s.send(txFrame)
-
-    nf1s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, proto)
-    nf1s.bind(("nf1",proto))
-
-    rxFrame = nf1s.recv(2048)
-
-    dstAddr,srcAddr,proto = struct.unpack("!6s6sh",rxFrame[:14])
-    ethData = rxFrame[14:]
-
-    print "Rx[%d]: "%len(ethData) + string.join(["%02x"%ord(b) for b in ethData]," ")
-
-    nf0s.close()
-    nf1s.close()
-
     # Remove the driver.
     subprocess.call("sudo rmmod nf10_eth_driver", shell=True);
 
