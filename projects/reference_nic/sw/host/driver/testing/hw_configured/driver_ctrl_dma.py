@@ -23,7 +23,7 @@ import subprocess
 
 def usage(f = sys.stdout):
     print >> f, """
-Usage: %(progname)s buffer_size iterations
+Usage: %(progname)s bufsize_min bufsize_max iterations
     bufsize_min     - Minimum buffer size
     bufsize_max     - Maximum buffer size
     iterations      - Number of transfers to do
