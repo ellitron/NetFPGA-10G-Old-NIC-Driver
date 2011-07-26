@@ -3,11 +3,21 @@
 #///////////////////////////////////////////////////////////////////////
 #
 #   Description:
+#       Send packets one by one through the Ethernet interfaces
+#       {nf0,nf1,nf2,nf3} via raw sockets and check that the received
+#       packets are exactly the ones we sent in, and that we received
+#       the packet on the expected interface according to the cabling
+#       setup. The user specifies as arguments to this test the cabling
+#       arrangement, as well as min and max packet size, and the desired
+#       number of packets to send through the card in each direction for
+#       each connection. 
 #
 #   Expected System State:
-# 
+#       - Driver not loaded.
+#       - All Ethernet ports looped back (in any arrangement).
+#
 #   Revision history:
-#       2011/07/22 Jonathan Ellithorpe: Initial check-in
+#       2011/07/25 Jonathan Ellithorpe: Initial check-in
 #
 #///////////////////////////////////////////////////////////////////////
 
