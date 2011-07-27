@@ -922,6 +922,30 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     return NETDEV_TX_OK;
 }
 
+static void nf10_ndo_tx_timeout(struct net_device *netdev)
+{
+    printk(KERN_WARNING "%s: WARNING: nf10_ndo_tx_timeout(): hit timeout!\n", driver_name);
+}
+
+static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev)
+{
+    PDEBUG("nf10_ndo_get_stats(): Getting the stats\n");    
+    
+    return &netdev->stats;
+}
+
+static int nf10_ndo_set_mac_address(struct net_device *netdev, void *addr)
+{ 
+    struct sockaddr *saddr = addr;
+    
+    if(!is_valid_ether_addr(saddr->sa_data))
+        return -EADDRNOTAVAIL;
+
+    memcpy(netdev->dev_addr, saddr->sa_data, netdev->addr_len);    
+
+    return 0;
+}
+
 /* Helper functions for getting and setting source and destination
  * ports. The interpretation of opcode depends on the direction the
  * packet is headed, therefore we need {rx,tx}x{src,dst}x{get,set}
@@ -1117,30 +1141,6 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     }
     
     return n_rx;
-}
-
-static void nf10_ndo_tx_timeout(struct net_device *netdev)
-{
-    printk(KERN_WARNING "%s: WARNING: nf10_ndo_tx_timeout(): hit timeout!\n", driver_name);
-}
-
-static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev)
-{
-    PDEBUG("nf10_ndo_get_stats(): Getting the stats\n");    
-    
-    return &netdev->stats;
-}
-
-static int nf10_ndo_set_mac_address(struct net_device *netdev, void *addr)
-{ 
-    struct sockaddr *saddr = addr;
-    
-    if(!is_valid_ether_addr(saddr->sa_data))
-        return -EADDRNOTAVAIL;
-
-    memcpy(netdev->dev_addr, saddr->sa_data, netdev->addr_len);    
-
-    return 0;
 }
 
 /* When the kernel finds a device with a vendor and device ID associated with this driver
