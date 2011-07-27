@@ -311,11 +311,10 @@ int genl_cmd_dma_tx(struct sk_buff *skb, struct genl_info *info)
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
     PDEBUG("genl_cmd_dma_tx(): DMA TX operation info:\n"
-        "\tReceived msg:\t\t%s\n"
         "\tReceived msg length:\t%d\n"
         "\tReceived opcode:\t0x%08x\n"
         "\tUsing buffer number:\t%d\n",
-        (char*)nla_data(na_msg), nla_len(na_msg), *(uint32_t*)nla_data(na_opcode), tx_dma_stream.buf_index);    
+        nla_len(na_msg), *(uint32_t*)nla_data(na_opcode), tx_dma_stream.buf_index);    
 
     /* Tell hardware we filled a buffer. */
     *tx_dma_stream.doorbell = 1;
@@ -868,6 +867,11 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
 
     /* Start the clock! */
     netdev->trans_start = jiffies;
+
+    /* FIXME: OK, tx_dma_stream is technically a shared data structure
+     * between the 4 ethernet interfaces. If this code can be entered
+     * into concurrently by different interfaces, then we need to lock
+     * down access here to the tx_dma_stream structure. */
 
     /* Wait for buffer to be free. */
     /* FIXME: Want to use netif_{stop,wake}_queue functions, except that presently we have
