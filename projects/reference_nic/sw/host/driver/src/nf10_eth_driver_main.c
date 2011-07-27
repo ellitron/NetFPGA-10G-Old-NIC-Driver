@@ -141,7 +141,7 @@ static const struct net_device_ops nf10_netdev_ops = {
  * respond to a request from a master. The significance for NF10 designs
  * is that they have this many cycles to respond to register accesses
  * across the AXI-lite interface to the design coming from OPED. */
-#define OCCP_LOG_TIMEOUT    4
+#define OCCP_LOG_TIMEOUT    30
 
 /* Pointer to OCPI register space for the NF10 design. */
 uint32_t            *nf10_regs;
