@@ -899,7 +899,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
-    PDEBUG("nf10_ndo_start_xmit(): DMA TX operation info:\n"
+    PDEBUG("nf10_ndo_start_xmit(): Packet TX info:\n"
         "\tMessage length:\t\t%d\n"
         "\tOpcode:\t\t\t0x%08x\n"
         "\tUsing buffer number:\t%d\n",
@@ -1027,7 +1027,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
-        PDEBUG("nf10_napi_struct_poll(): DMA RX operation info:\n"
+        PDEBUG("nf10_napi_struct_poll(): Packet RX info:\n"
             "\tMessage length:\t\t%d\n"
             "\tMessage opCode:\t\t0x%08x\n"
             "\tFrom buffer number:\t%d\n",
