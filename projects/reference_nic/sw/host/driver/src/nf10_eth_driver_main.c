@@ -814,7 +814,6 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
 {
     void        *data;
     uint32_t    len;
-    int         waited;
     int         iface;
     uint32_t    opcode;
 
@@ -873,16 +872,36 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
      * into concurrently by different interfaces, then we need to lock
      * down access here to the tx_dma_stream structure. */
 
-    /* Wait for buffer to be free. */
-    /* FIXME: Want to use netif_{stop,wake}_queue functions, except that presently we have
-     * no interrupts for tx, so we don't have a proper way to call netif_wake_queue aside
-     * from setting a timer and a callback. For now... just wait. */
-    /* Perhaps another solution for now would be to just drop the packet after so many tries. */
-    waited = 0;
-    while(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
-        if(!waited)
-            PDEBUG("nf10_ndo_start_xmit(): waiting for buffer: %d\n", tx_dma_stream.buf_index);
-        waited = 1;
+    /* FIXME: For now we'll just drop packets when the buffer is full.
+     * An alternative would be to stash the skb, call netif_stop_queue, set
+     * a timer, and return. When the timer fires, check for a free buffer.
+     * If there's a free buffer then send the stashed skb and call
+     * netif_wake_queue. If there isn't a free buffer then continue waiting
+     * by setting the timer again. If this continues and a timeout event
+     * occurs, probably the hardware is locked up. Would need to consider
+     * carefully what is the right thing to do in that case. Maybe stop the
+     * timer and enter a failure mode. 
+     *
+     * This general solution however may be quite tricky because there
+     * are NUM_NETDEVS network devices potentially transmitting. This
+     * solution would need to be implemented for each netdev. And if
+     * that's the case, then it's possible for a working netdev to
+     * starve blocked netdevs from transmitting, resulting in timeouts
+     * for those netdevs. Perhaps the right solution is that when one
+     * netdev finds the queue full, it stops all the netdevs together.
+     * When the timer fires and it finds a free buffer, then it would
+     * start all the netdevs together. But, this gets complicated by the
+     * fact that other netdevs may be concurrently executing the _xmit
+     * code when one of them encounters the full buffer... potentially
+     * causing all manner of concurrency issues when one tries to stop
+     * the others. In any case, the solution does not seem simple at
+     * all, and so for now we'll just drop the packet. */
+    if(tx_dma_stream.flags[tx_dma_stream.buf_index] == 0) {
+        PDEBUG("nf10_ndo_start_xmit(): TX buffers full (@ buf %d)... dropping packet\n", tx_dma_stream.buf_index);
+        netdev->stats.tx_dropped++;
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
     }
 
     /* Copy message into buffer. */
