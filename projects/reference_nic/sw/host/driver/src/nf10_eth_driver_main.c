@@ -28,6 +28,7 @@
 #include <linux/pci.h>
 #include <net/genetlink.h>
 #include <linux/dma-mapping.h>
+#include <linux/spinlock.h>
 
 /* Driver specific definitions. */
 #include "nf10_eth_driver.h"
@@ -51,19 +52,19 @@ static int                      nf10_napi_struct_poll(struct napi_struct *napi, 
 
 static void                     rx_poll_timer_cb(unsigned long arg);
 
-uint32_t    rx_get_dst_iface(uint32_t opcode);
-uint32_t    rx_get_src_iface(uint32_t opcode);
-void        rx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
-void        rx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
-uint32_t    tx_get_dst_iface(uint32_t opcode);
-uint32_t    tx_get_src_iface(uint32_t opcode);
-void        tx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
-void        tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
+uint32_t                        rx_get_dst_iface(uint32_t opcode);
+uint32_t                        rx_get_src_iface(uint32_t opcode);
+void                            rx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
+void                            rx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
+uint32_t                        tx_get_dst_iface(uint32_t opcode);
+uint32_t                        tx_get_src_iface(uint32_t opcode);
+void                            tx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
+void                            tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
 
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.1.7"
+#define NF10_ETH_DRIVER_VERSION     "1.1.8"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
@@ -74,8 +75,8 @@ struct net_device *nf10_netdevs[NUM_NETDEVS];
 /* MMIO */
 /* Like the DMA variables, probe() and remove() both use bar0_base_va, so need
  * to make global. FIXME: explore more elegant way of doing this. */
-void __iomem    *bar0_base_va;
-unsigned int    bar0_size;
+void __iomem        *bar0_base_va;
+unsigned int        bar0_size;
 
 /* DMA */
 /* *_dma_reg_* need these to be global for now since probe() and remobe() both use them.
@@ -86,6 +87,10 @@ void                *rx_dma_reg_va; /* RX DMA region kernel virtual address. */
 dma_addr_t          rx_dma_reg_pa;  /* RX DMA region physical address. */
 struct dma_stream   tx_dma_stream;  /* To device. */
 struct dma_stream   rx_dma_stream;  /* From device. */
+
+/* Need a locking mechanism to control concurrent access to each DMA region. */
+spinlock_t          tx_dma_region_spinlock = SPIN_LOCK_UNLOCKED;
+spinlock_t          rx_dma_region_spinlock = SPIN_LOCK_UNLOCKED;
 
 /* DMA parameters. */
 #define     DMA_BUF_SIZE        2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
@@ -812,10 +817,11 @@ uint32_t get_iface_from_netdev(struct net_device *netdev)
 
 static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
-    void        *data;
-    uint32_t    len;
-    int         iface;
-    uint32_t    opcode;
+    void            *data;
+    uint32_t        len;
+    int             iface;
+    uint32_t        opcode;
+    unsigned long   tx_dma_region_spinlock_flags;
 
     PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");    
 
@@ -867,10 +873,8 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Start the clock! */
     netdev->trans_start = jiffies;
 
-    /* FIXME: OK, tx_dma_stream is technically a shared data structure
-     * between the 4 ethernet interfaces. If this code can be entered
-     * into concurrently by different interfaces, then we need to lock
-     * down access here to the tx_dma_stream structure. */
+    /* First need to acquire lock to access the TX DMA region. */
+    spin_lock_irqsave(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags);
 
     /* FIXME: For now we'll just drop packets when the buffer is full.
      * An alternative would be to stash the skb, call netif_stop_queue, set
@@ -900,6 +904,7 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
         PDEBUG("nf10_ndo_start_xmit(): TX buffers full (@ buf %d)... dropping packet\n", tx_dma_stream.buf_index);
         netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
+        spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
@@ -918,11 +923,12 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
-    PDEBUG("nf10_ndo_start_xmit(): Packet TX info:\n"
-        "\tMessage length:\t\t%d\n"
-        "\tOpcode:\t\t\t0x%08x\n"
-        "\tUsing buffer number:\t%d\n",
-        skb->len, opcode, tx_dma_stream.buf_index);
+    /* Update the buffer index. */
+    if(++tx_dma_stream.buf_index == dma_cpu_bufs)
+        tx_dma_stream.buf_index = 0;
+
+    /* Release the lock, finished with TX DMA region. */
+    spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
 
     /* Make sure all the writes have been done before ringing the doorbell. */
     wmb();
@@ -930,9 +936,11 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Tell hardware we filled a buffer. */
     *tx_dma_stream.doorbell = 1;
 
-    /* Update the buffer index. */
-    if(++tx_dma_stream.buf_index == dma_cpu_bufs)
-        tx_dma_stream.buf_index = 0;
+    PDEBUG("nf10_ndo_start_xmit(): Packet TX info:\n"
+        "\tMessage length:\t\t%d\n"
+        "\tOpcode:\t\t\t0x%08x\n"
+        "\tUsing buffer number:\t%d\n",
+        skb->len, opcode, tx_dma_stream.buf_index);
 
     /* Update the statistics. */
     netdev->stats.tx_packets++;
