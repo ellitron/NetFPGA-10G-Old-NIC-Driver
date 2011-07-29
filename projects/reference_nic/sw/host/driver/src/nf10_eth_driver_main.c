@@ -64,7 +64,7 @@ void                            tx_set_src_iface(uint32_t *opcode, uint32_t src_
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.1.8"
+#define NF10_ETH_DRIVER_VERSION     "1.1.9"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
@@ -105,7 +105,7 @@ uint32_t dma_cpu_bufs;
 uint32_t dma_region_size;
 
 /* Interval at which to poll for received packets. */
-#define     RX_POLL_INTERVAL    16
+#define     RX_POLL_INTERVAL    1
 
 /* Weight used in NAPI for polling. */
 #define     RX_POLL_WEIGHT      16
@@ -1177,18 +1177,18 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
 static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {    
     /* OpenCPI */
-    OccpSpace     *occp;
-    OcdpProperties    *dp0_props;
-    OcdpProperties    *dp1_props;
-    uint32_t    *sma0_props;
-    uint32_t    *sma1_props;
-    uint32_t    *bias_props;
+    OccpSpace           *occp;
+    OcdpProperties      *dp0_props;
+    OcdpProperties      *dp1_props;
+    uint32_t            *sma0_props;
+    uint32_t            *sma1_props;
+    uint32_t            *bias_props;
     OccpWorkerRegisters 
-            *dp0_regs,
-            *dp1_regs,
-            *sma0_regs,
-            *sma1_regs,
-            *bias_regs;
+                        *dp0_regs,
+                        *dp1_regs,
+                        *sma0_regs,
+                        *sma1_regs,
+                        *bias_regs;
 
     int err;
     
