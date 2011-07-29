@@ -1075,13 +1075,16 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     struct sk_buff  *skb;
     int             buf_index = rx_dma_stream.buf_index;
     int             dst_iface; /* Destination interface. */
+
+    PDEBUG("nf10_napi_struct_poll(): Beginning to slurp up packets with budget %d...\n", budget);
     
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
-        PDEBUG("nf10_napi_struct_poll(): Packet RX info:\n"
+        PDEBUG("nf10_napi_struct_poll(): Packet %d RX info:\n"
             "\tMessage length:\t\t%d\n"
             "\tMessage opCode:\t\t0x%08x\n"
             "\tFrom buffer number:\t%d\n",
+            n_rx,
             rx_dma_stream.metadata[buf_index].length, 
             rx_dma_stream.metadata[buf_index].opCode,
             buf_index);
@@ -1137,8 +1140,6 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         /* FIXME: need to set ip_summed? */
         skb->protocol = eth_type_trans(skb, nf10_netdevs[dst_iface]);
         
-        PDEBUG("nf10_napi_struct_poll(): received a packet!\n");
-
         netif_receive_skb(skb);
 
         /* Mark the buffer as empty. */
@@ -1162,9 +1163,12 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     
     /* Check if we processed everything. */
     if(rx_dma_stream.flags[buf_index] == 0) {
+        PDEBUG("nf10_napi_struct_poll(): Slurped up all the packets there were to slurp!\n");
         napi_complete(napi);
         rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
         add_timer(&rx_poll_timer);
+    } else {
+        PDEBUG("nf10_napi_struct_poll(): Slurped %d packets but still more left...\n", n_rx);
     }
     
     return n_rx;
