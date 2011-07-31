@@ -130,11 +130,12 @@ static void usage(void)
         "usage: %s [OPTIONS] COMMAND [ARG...]\n\n"
         "   echo STRING             Send STRING to driver, driver echoes it back.\n"
         "   dma_tx STRING [OPCODE]  Transmit STRING to the hardware via DMA w/ optional OPCODE.\n"
-        "   dma_rx                  Pull out what's next in the DMA RX buffer and print it\n"
-        "   reg_rd ADDR             Read register at address ADDR\n"
-        "   reg_wr ADDR VAL         Write VAL to register at address ADDR\n"
-        "   napi_enable             Enable driver polling for RX packets\n"
-        "   napi_disable            Disable driver polling for RX packets\n",
+        "   dma_rx                  Pull out what's next in the DMA RX buffer and print it.\n"
+        "   reg_rd ADDR             Read register at address ADDR.\n"
+        "   reg_wr ADDR VAL         Write VAL to register at address ADDR.\n"
+        "   napi_enable             Enable driver polling for RX packets.\n"
+        "   napi_disable            Disable driver polling for RX packets.\n"
+        "   help                    Print this help message.\n",
         program_name, program_name);
 }
 
@@ -599,7 +600,12 @@ static void do_napi_disable(int argc, char *argv[])
     driver_disconnect();
 }
 
-static struct command all_commands[] = {
+static void do_help(int argc, char *argv[])
+{
+    usage();
+}
+
+ static struct command all_commands[] = {
     { "echo", 1, 1, do_echo },
     { "dma_tx", 1, 2, do_dma_tx },
     { "dma_rx", 0, 0, do_dma_rx },
@@ -607,5 +613,6 @@ static struct command all_commands[] = {
     { "reg_wr", 2, 2, do_reg_wr },
     { "napi_enable", 0, 0, do_napi_enable },
     { "napi_disable", 0, 0, do_napi_disable },
+    { "help", 0, 0, do_help },
     { NULL, 0, 0, NULL },
 };
