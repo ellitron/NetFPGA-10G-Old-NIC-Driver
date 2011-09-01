@@ -761,6 +761,10 @@ int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
     tx_dma_stream.buf_index = 0;
     /* Do not memset the flags... because we're actually pointing to the RX DMA stream. */
 
+    /* Start the polling timer for receiving packets. */
+    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+    add_timer(&rx_poll_timer);
+ 
     hw_state |= HW_GHOST;
 
     PDEBUG("genl_cmd_ghost_enable(): ghosting enabled\n");    
@@ -774,6 +778,9 @@ int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
 int genl_cmd_ghost_disable(struct sk_buff *skb, struct genl_info *info)
 {
     if(hw_state & HW_GHOST) {
+        /* Stop the polling timer for receiving packets. */
+        del_timer(&rx_poll_timer);
+
         kfree(rx_dma_reg_va);
         rx_dma_stream.buffers   = NULL;
         rx_dma_stream.metadata  = NULL;
@@ -1806,7 +1813,9 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 static void remove(struct pci_dev *pdev)
 {
     PDEBUG("remove(): entering remove()\n");
-    
+   
+    /* FIXME: Why don't I stop the polling timer here? Right now it's in the _exit function. */
+ 
     dma_free_coherent(&pdev->dev, dma_region_size, rx_dma_reg_va, rx_dma_reg_pa);
     dma_free_coherent(&pdev->dev, dma_region_size, tx_dma_reg_va, tx_dma_reg_pa);
     iounmap(bar0_base_va);
