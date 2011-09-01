@@ -697,6 +697,103 @@ int genl_cmd_napi_disable(struct sk_buff *skb, struct genl_info *info)
     return 0;
 }
 
+/* Ghost enable command.
+ * Application sends us this command to enable software ghosting of the 
+ * 10G card. */
+int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
+{
+    if(hw_state & HW_FOUND) {
+        printk(KERN_ERR "%s: ERROR: genl_cmd_ghost_enable(): cannot enable ghosting when hardware has been found\n", driver_name); 
+        return 0;
+    }
+
+    if(hw_state & HW_GHOST) {
+        printk(KERN_INFO "%s: INFO: genl_cmd_ghost_enable(): ghosting already enable\n", driver_name);
+        return 0;
+    }
+
+    /* Allocate RX DMA region using kmalloc (instead of dma_alloc_coherent) since there's no actual
+     * device present (dma_alloc_coherent requires a device argument). */
+    for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs > MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
+        dma_region_size = ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * dma_cpu_bufs);
+        
+        /* Allocate TX DMA region. */
+        rx_dma_reg_va = kmalloc(dma_region_size, GFP_KERNEL);
+        if(rx_dma_reg_va == NULL) {
+            PDEBUG("genl_cmd_ghost_enable: failed to alloc RX DMA region of size %d bytes... trying less\n", dma_region_size);
+            /* Try smaller allocation. */
+            continue;
+        }
+
+        /* Memory been allocated successfully. */   
+        break;
+    }
+
+    /* Check that the memory allocations succeeded. */
+    if(rx_dma_reg_va == NULL) {
+        printk(KERN_ERR "nf10_eth_driver: ERROR: genl_cmd_ghost_enable: failed to allocate DMA regions\n");
+        return 0;        
+    }
+    
+    /* Otherwise set TX region the same at the RX region. */
+    tx_dma_reg_va = rx_dma_reg_va; 
+
+    PDEBUG("genl_cmd_ghost_enable: successfully allocated the TX and RX DMA regions:\n"
+        "\tTX Region: Virtual address:\t0x%016llx\n"
+        "\tTX Region Size:\t\t\t%d\n"
+        "\tRX Region: Virtual address:\t0x%016llx\n"
+        "\tRX Region Size:\t\t\t%d\n",
+        /* FIXME: typcasting might throw warnings on 32-bit systems... */
+        (uint64_t)tx_dma_reg_va, dma_region_size,
+        (uint64_t)rx_dma_reg_va, dma_region_size);
+
+    /* Setup RX DMA stream. */
+    rx_dma_stream.buffers   = (uint8_t *)rx_dma_reg_va;
+    rx_dma_stream.metadata  = (OcdpMetadata *)(rx_dma_stream.buffers + dma_cpu_bufs * DMA_BUF_SIZE);
+    rx_dma_stream.flags     = (uint32_t *)(rx_dma_stream.metadata + dma_cpu_bufs);
+    rx_dma_stream.buf_index = 0;
+    memset((void*)rx_dma_stream.flags, 0, dma_cpu_bufs * sizeof(uint32_t));
+
+    /* Setup TX DMA stream. In this case it's the same as the RX DMA stream. */
+    tx_dma_stream.buffers   = rx_dma_stream.buffers;
+    tx_dma_stream.metadata  = rx_dma_stream.metadata;
+    tx_dma_stream.flags     = rx_dma_stream.flags;
+    tx_dma_stream.buf_index = 0;
+    /* Do not memset the flags... because we're actually pointing to the RX DMA stream. */
+
+    hw_state |= HW_GHOST;
+
+    PDEBUG("genl_cmd_ghost_enable(): ghosting enabled\n");    
+
+    return 0;
+}
+
+/* Ghosting disable command.
+ * Application sends us this command to disable software ghosting of the
+ * 10G card. */
+int genl_cmd_ghost_disable(struct sk_buff *skb, struct genl_info *info)
+{
+    if(hw_state & HW_GHOST) {
+        kfree(rx_dma_reg_va);
+        rx_dma_stream.buffers   = NULL;
+        rx_dma_stream.metadata  = NULL;
+        rx_dma_stream.flags     = NULL;
+
+        /* Setup TX DMA stream. In this case it's the same as the RX DMA stream. */
+        tx_dma_stream.buffers   = NULL;
+        tx_dma_stream.metadata  = NULL;
+        tx_dma_stream.flags     = NULL;
+
+        hw_state &= ~HW_GHOST;
+
+        PDEBUG("genl_cmd_ghost_disable(): ghosting disabled\n"); 
+    } else {
+        PDEBUG("genl_cmd_ghost_disable(): ghosting is already disabled...\n");
+    }
+
+    return 0;
+}
+
 /* Operations defined for our Generic Netlink family... */
 
 /* Echo operation genl structure. */
@@ -762,6 +859,24 @@ struct genl_ops genl_ops_napi_disable = {
     .dumpit     = NULL,
 };
 
+/* Register ghost enable operation genl structure. */
+struct genl_ops genl_ops_ghost_enable = {
+    .cmd        = NF10_GENL_C_GHOST_ENABLE,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_ghost_enable,
+    .dumpit     = NULL,
+};
+
+/* Register NAPI disable operation genl structure. */
+struct genl_ops genl_ops_ghost_disable = {
+    .cmd        = NF10_GENL_C_GHOST_DISABLE,
+    .flags      = 0,
+    .policy     = nf10_genl_policy,
+    .doit       = genl_cmd_ghost_disable,
+    .dumpit     = NULL,
+};
+
 static struct genl_ops *genl_all_ops[] = {
     &genl_ops_echo,
     &genl_ops_dma_tx,
@@ -770,6 +885,8 @@ static struct genl_ops *genl_all_ops[] = {
     &genl_ops_reg_wr,
     &genl_ops_napi_enable,
     &genl_ops_napi_disable,
+    &genl_ops_ghost_enable,
+    &genl_ops_ghost_disable,
 };
 
 /* These are the IDs of the PCI devices that this Ethernet driver supports. */
@@ -815,6 +932,90 @@ uint32_t get_iface_from_netdev(struct net_device *netdev)
     return -1;
 }
 
+static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netdev)
+{
+    void            *data;
+    uint32_t        len;
+    int             src_iface;
+    int             dst_iface;
+    uint32_t        opcode;    
+
+    /* Get data and length. */
+    data = (void*)skb->data;
+    len = skb->len;
+
+    /* Check length against the DMA buffer size. */
+    if(len > DMA_BUF_SIZE) {
+        printk(KERN_ERR "%s: ERROR: nf10_ghost_xmit(): packet length %d greater than buffer size %d\n", driver_name, len, DMA_BUF_SIZE);
+        netdev->stats.tx_dropped++;
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
+    }
+
+    /* Opcode for setting source and destination ports. */
+    opcode = 0;
+    src_iface = get_iface_from_netdev(netdev);
+    if(src_iface < 0) {
+        printk(KERN_ERR "%s: ERROR: nf10_ghost_xmit(): could not determine source interface number from netdev\n", driver_name);
+        netdev->stats.tx_dropped++;
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
+    }
+
+    /* 0->1
+     * 1->0
+     * 2->3
+     * 3->2 */
+    dst_iface = ((int)(src_iface/2))*2 + ((src_iface+1)%2);
+
+    rx_set_dst_iface(&opcode, dst_iface); 
+    
+    /* DMA the packet to the hardware. */
+
+    /* Start the clock! */
+    netdev->trans_start = jiffies;
+
+    if(tx_dma_stream.flags[tx_dma_stream.buf_index] == 1) {
+        PDEBUG("nf10_ghost_xmit(): TX buffers full (@ buf %d)... dropping packet\n", tx_dma_stream.buf_index);
+        netdev->stats.tx_dropped++;
+        dev_kfree_skb(skb);
+        /* FIXME: not really sure of the right return value in this case... */
+        return NETDEV_TX_OK;
+    }
+
+    /* Copy message into buffer. */
+    memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
+
+    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
+
+    /* Fill out metadata. */
+    /* Length. */
+    tx_dma_stream.metadata[tx_dma_stream.buf_index].length = len;
+    /* OpCode. */
+    tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = opcode;
+
+    /* Set the buffer flag to full. */
+    tx_dma_stream.flags[tx_dma_stream.buf_index] = 1;
+
+    /* Update the buffer index. */
+    if(++tx_dma_stream.buf_index == dma_cpu_bufs)
+        tx_dma_stream.buf_index = 0;
+
+    PDEBUG("nf10_ghost_xmit(): Packet TX info:\n"
+        "\tMessage length:\t\t%d\n"
+        "\tOpcode:\t\t\t0x%08x\n"
+        "\tUsing buffer number:\t%d\n",
+        skb->len, opcode, tx_dma_stream.buf_index);
+
+    /* Update the statistics. */
+    netdev->stats.tx_packets++;
+    netdev->stats.tx_bytes += len;
+
+    return NETDEV_TX_OK;
+}
+
 static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
     void            *data;
@@ -823,6 +1024,13 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     uint32_t        opcode;
     unsigned long   tx_dma_region_spinlock_flags;
 
+    /* If the driver is ghosting the hardware then use a special function
+     * for this. */
+    if(hw_state & HW_GHOST) {
+        return nf10_ghost_xmit(skb, netdev);
+    }
+
+    /* Otherwise send the packet to the hardware. */
     PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");    
 
     /* Get data and length. */
@@ -1761,7 +1969,7 @@ static int __init nf10_eth_driver_init(void)
     /* Enable NAPI. */
     napi_enable(&nf10_napi_struct);
 
-     /* Register the pci_driver. 
+    /* Register the pci_driver. 
      * Note: This will succeed even without a card installed in the system. */
     err = pci_register_driver(&nf10_pci_driver);
     if(err != 0) {

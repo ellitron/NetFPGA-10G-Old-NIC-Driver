@@ -46,6 +46,7 @@
 /* Hardware state flags. */
 #define HW_FOUND        0x00000001
 #define HW_INIT         0x00000002
+#define HW_GHOST        0x00000004
 
 /* Hardware packet size bounds. */
 #define NF10_PKT_SIZE_MIN   33
