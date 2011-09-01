@@ -1311,8 +1311,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
 
-            /* Tell the hardware we emptied the buffer. */
-            *rx_dma_stream.doorbell = 1;
+            if(!(hw_state & HW_GHOST)) {
+                /* Tell the hardware we emptied the buffer. */
+                *rx_dma_stream.doorbell = 1;
+            }
 
             /* Update the buffer index. */
             if(++rx_dma_stream.buf_index == dma_cpu_bufs)
@@ -1332,8 +1334,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
 
-            /* Tell the hardware we emptied the buffer. */
-            *rx_dma_stream.doorbell = 1;
+            if(!(hw_state & HW_GHOST)) {
+                /* Tell the hardware we emptied the buffer. */
+                *rx_dma_stream.doorbell = 1;
+            }
 
             /* Update the buffer index. */
             if(++rx_dma_stream.buf_index == dma_cpu_bufs)
@@ -1360,8 +1364,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         /* Mark the buffer as empty. */
         rx_dma_stream.flags[buf_index] = 0;
 
-        /* Tell the hardware we emptied the buffer. */
-        *rx_dma_stream.doorbell = 1;
+        if(!(hw_state & HW_GHOST)) {
+            /* Tell the hardware we emptied the buffer. */
+            *rx_dma_stream.doorbell = 1;
+        }
 
         /* Update the buffer index. */
         if(++rx_dma_stream.buf_index == dma_cpu_bufs)
