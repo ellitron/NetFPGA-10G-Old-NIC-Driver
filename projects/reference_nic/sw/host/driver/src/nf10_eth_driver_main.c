@@ -718,7 +718,7 @@ int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
         dma_region_size = ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * dma_cpu_bufs);
         
         /* Allocate TX DMA region. */
-        rx_dma_reg_va = kmalloc(dma_region_size, GFP_KERNEL);
+        rx_dma_reg_va = kmalloc(dma_region_size, GFP_KERNEL | __GFP_NOWARN);
         if(rx_dma_reg_va == NULL) {
             PDEBUG("genl_cmd_ghost_enable: failed to alloc RX DMA region of size %d bytes... trying less\n", dma_region_size);
             /* Try smaller allocation. */
@@ -2018,7 +2018,11 @@ static void __exit nf10_eth_driver_exit(void)
     }
 
     pci_unregister_driver(&nf10_pci_driver);
-    
+   
+    if(hw_state & HW_GHOST) {
+        kfree(rx_dma_reg_va);
+    }
+
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Unloaded.\n");
 }
 
