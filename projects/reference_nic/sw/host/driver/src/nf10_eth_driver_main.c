@@ -29,6 +29,8 @@
 #include <net/genetlink.h>
 #include <linux/dma-mapping.h>
 #include <linux/spinlock.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
 
 /* Driver specific definitions. */
 #include "nf10_eth_driver.h"
@@ -47,6 +49,9 @@ static netdev_tx_t              nf10_ndo_start_xmit(struct sk_buff *skb, struct 
 static void                     nf10_ndo_tx_timeout(struct net_device *netdev);
 static struct net_device_stats* nf10_ndo_get_stats(struct net_device *netdev);
 static int                      nf10_ndo_set_mac_address(struct net_device *netdev, void *addr);
+
+static int                      nf10_ndho_create(struct sk_buff *skb, struct net_device *dev, unsigned short type, const void *daddr, const void *saddr, unsigned len);
+static int                      nf10_ndho_rebuild(struct sk_buff *skb);
 
 static int                      nf10_napi_struct_poll(struct napi_struct *napi, int budget);
 
@@ -132,6 +137,11 @@ static const struct net_device_ops nf10_netdev_ops = {
     .ndo_tx_timeout         = nf10_ndo_tx_timeout,
     .ndo_get_stats          = nf10_ndo_get_stats,
     .ndo_set_mac_address    = nf10_ndo_set_mac_address,
+};
+
+static const struct header_ops nf10_netdev_header_ops = {
+    .create                 = nf10_ndho_create,
+    .rebuild                = nf10_ndho_rebuild,
 };
 
 /* OpenCPI */
@@ -946,6 +956,10 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     int             src_iface;
     int             dst_iface;
     uint32_t        opcode;    
+    struct ethhdr   *eth;
+    struct iphdr    *ip;
+    uint32_t        *saddr;
+    uint32_t        *daddr;
 
     /* Get data and length. */
     data = (void*)skb->data;
@@ -975,10 +989,27 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
      * 1->0
      * 2->3
      * 3->2 */
-    dst_iface = ((int)(src_iface/2))*2 + ((src_iface+1)%2);
+    dst_iface = src_iface ^ 1;
+
+    printk("dst_iface: %d\n", dst_iface);
 
     rx_set_dst_iface(&opcode, dst_iface); 
     
+    /* Do a switcharoo on the packet's IP address. */
+    eth = (struct ethhdr *)((char*)data);
+
+    if(eth->h_proto == htons(ETH_P_IP)) {
+        ip      = (struct iphdr *)(((char*)data) + sizeof(struct ethhdr));
+        saddr   = &(ip->saddr);
+        daddr   = &(ip->daddr);
+        /* Flip the last bit of the 3rd octet of the addresses. */
+        ((uint8_t *)saddr)[2] ^= 1;
+        ((uint8_t *)daddr)[2] ^= 1;
+        /* Fix the checksum. */
+        ip->check = 0;         /* and rebuild the checksum (ip needs it) */
+        ip->check = ip_fast_csum((unsigned char *)ip,ip->ihl);
+    }
+
     /* DMA the packet to the hardware. */
 
     /* Start the clock! */
@@ -1188,6 +1219,34 @@ static int nf10_ndo_set_mac_address(struct net_device *netdev, void *addr)
     return 0;
 }
 
+static int nf10_ndho_create(struct sk_buff *skb, struct net_device *dev, unsigned short type, const void *daddr, const void *saddr, unsigned len)
+{
+    struct ethhdr *eth = (struct ethhdr *)skb_push(skb, ETH_HLEN);
+
+    PDEBUG("nf10_ndho_create(): Creating Ethernet header...\n");
+
+    eth->h_proto = htons(type);
+    memcpy(eth->h_source, saddr ? saddr : dev->dev_addr, dev->addr_len);
+    memcpy(eth->h_dest,   daddr ? daddr : dev->dev_addr, dev->addr_len);
+    eth->h_dest[ETH_ALEN-3]   ^= 0x01;   /* dest is us xor 1 */
+
+    return (dev->hard_header_len);
+}
+
+static int nf10_ndho_rebuild(struct sk_buff *skb)
+{
+    struct ethhdr *eth = (struct ethhdr *) skb->data;
+    struct net_device *dev = skb->dev;
+    
+    PDEBUG("nf10_ndho_rebuild(): Rebuilding Ethernet header...\n");
+
+    memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
+    memcpy(eth->h_dest, dev->dev_addr, dev->addr_len);
+    eth->h_dest[ETH_ALEN-3]   ^= 0x01;   /* dest is us xor 1 */
+    return 0;
+}
+
+
 /* Helper functions for getting and setting source and destination
  * ports. The interpretation of opcode depends on the direction the
  * packet is headed, therefore we need {rx,tx}x{src,dst}x{get,set}
@@ -1359,6 +1418,9 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         /* FIXME: need to set ip_summed? */
         skb->protocol = eth_type_trans(skb, nf10_netdevs[dst_iface]);
         
+        /* This is for ghosting mode. */
+        skb->ip_summed = CHECKSUM_UNNECESSARY; /* don't check it */       
+ 
         netif_receive_skb(skb);
 
         /* Mark the buffer as empty. */
@@ -1863,7 +1925,12 @@ void nf10_netdev_init(struct net_device *netdev)
 
     ether_setup(netdev);
 
-    netdev->netdev_ops = &nf10_netdev_ops;
+    netdev->netdev_ops  = &nf10_netdev_ops;
+
+    /* These are for ghosting mode. */
+    netdev->header_ops  = &nf10_netdev_header_ops;
+    netdev->flags       |= IFF_NOARP;
+    //netdev->features    |= NETIF_F_NO_CSUM;
 
     netdev->watchdog_timeo = 5 * HZ;
 }
