@@ -1415,10 +1415,12 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         skb->dev = nf10_netdevs[dst_iface];
         /* FIXME: need to set ip_summed? */
         skb->protocol = eth_type_trans(skb, nf10_netdevs[dst_iface]);
-        
+       
+#ifdef DRIVER_GHOST 
         /* This is for ghosting mode. */
         skb->ip_summed = CHECKSUM_UNNECESSARY; /* don't check it */       
- 
+#endif 
+
         netif_receive_skb(skb);
 
         /* Mark the buffer as empty. */
@@ -1925,10 +1927,11 @@ void nf10_netdev_init(struct net_device *netdev)
 
     netdev->netdev_ops  = &nf10_netdev_ops;
 
+#ifdef DRIVER_GHOST
     /* These are for ghosting mode. */
     netdev->header_ops  = &nf10_netdev_header_ops;
     netdev->flags       |= IFF_NOARP;
-//    netdev->features    |= NETIF_F_NO_CSUM;
+#endif
 
     netdev->watchdog_timeo = 5 * HZ;
 }
