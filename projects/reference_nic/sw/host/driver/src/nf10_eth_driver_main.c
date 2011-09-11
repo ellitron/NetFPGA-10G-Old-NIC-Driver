@@ -991,8 +991,6 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
      * 3->2 */
     dst_iface = src_iface ^ 1;
 
-    printk("dst_iface: %d\n", dst_iface);
-
     rx_set_dst_iface(&opcode, dst_iface); 
     
     /* Do a switcharoo on the packet's IP address. */
@@ -1930,7 +1928,7 @@ void nf10_netdev_init(struct net_device *netdev)
     /* These are for ghosting mode. */
     netdev->header_ops  = &nf10_netdev_header_ops;
     netdev->flags       |= IFF_NOARP;
-    //netdev->features    |= NETIF_F_NO_CSUM;
+//    netdev->features    |= NETIF_F_NO_CSUM;
 
     netdev->watchdog_timeo = 5 * HZ;
 }
