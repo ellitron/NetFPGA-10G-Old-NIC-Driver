@@ -4,8 +4,8 @@ BIN			= bin
 ROOT		:= $(shell pwd)
 DATE		:= $(shell date +%Y%m%d_%H%M)
 
-DRIVER_DEBUG    = y
-DRIVER_GHOST	= y
+DRIVER_DEBUG    = n
+DRIVER_GHOST	= n
 export DRIVER_DEBUG
 export DRIVER_GHOST
 
