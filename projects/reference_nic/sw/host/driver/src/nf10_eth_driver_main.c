@@ -69,7 +69,7 @@ void                            tx_set_src_iface(uint32_t *opcode, uint32_t src_
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.2.0"
+#define NF10_ETH_DRIVER_VERSION     "1.2.1"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
@@ -918,6 +918,7 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     struct iphdr    *ip;
     uint32_t        *saddr;
     uint32_t        *daddr;
+    unsigned long   rx_dma_region_spinlock_flags;
 
     /* Get data and length. */
     data = (void*)skb->data;
@@ -971,10 +972,15 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     /* Start the clock! */
     netdev->trans_start = jiffies;
 
+    /* First need to acquire lock to access TX DMA region (which is the RX DMA region in disguise). */
+    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+
     if(tx_dma_stream.flags[tx_dma_stream.buf_index] == 1) {
         PDEBUG("nf10_ghost_xmit(): TX buffers full (@ buf %d)... dropping packet\n", tx_dma_stream.buf_index);
         netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
+        /* Release lock (again, actually the RX DMA region lock). */
+        spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
@@ -996,6 +1002,9 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     /* Update the buffer index. */
     if(++tx_dma_stream.buf_index == dma_cpu_bufs)
         tx_dma_stream.buf_index = 0;
+
+    /* Release the lock, finished with TX DMA region (RX DMA region in disguise). */
+    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags); 
 
     PDEBUG("nf10_ghost_xmit(): Packet TX info:\n"
         "\tMessage length:\t\t%d\n"
@@ -1305,9 +1314,13 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     struct sk_buff  *skb;
     int             buf_index = rx_dma_stream.buf_index;
     int             dst_iface; /* Destination interface. */
+    unsigned long   rx_dma_region_spinlock_flags;
 
     PDEBUG("nf10_napi_struct_poll(): Beginning to slurp up packets with budget %d...\n", budget);
-    
+   
+    /* First need to acquire lock to access the RX DMA region. */
+    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
         PDEBUG("nf10_napi_struct_poll(): Packet %d RX info:\n"
@@ -1411,6 +1424,9 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     } else {
         PDEBUG("nf10_napi_struct_poll(): Slurped %d packets but still more left...\n", n_rx);
     }
+
+    /* Release the RX DMA region lock. */
+    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
     
     return n_rx;
 }
