@@ -5,7 +5,7 @@ ROOT		:= $(shell pwd)
 DATE		:= $(shell date +%Y%m%d_%H%M)
 
 DRIVER_DEBUG    = n
-DRIVER_GHOST	= n
+DRIVER_GHOST	= y
 export DRIVER_DEBUG
 export DRIVER_GHOST
 

@@ -100,8 +100,8 @@ spinlock_t          rx_dma_region_spinlock = SPIN_LOCK_UNLOCKED;
 /* DMA parameters. */
 #define     DMA_BUF_SIZE        2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
 #define     DMA_FPGA_BUFS       4       /* Number of buffers on the FPGA side. Property of the hardware. */
-#define     DMA_CPU_BUFS        32768   /* Number of buffers on the CPU side. */
-#define     MIN_DMA_CPU_BUFS    8       /* Minimum number of buffers on the CPU side. */
+#define     DMA_CPU_BUFS        4   /* Number of buffers on the CPU side. */
+#define     MIN_DMA_CPU_BUFS    1       /* Minimum number of buffers on the CPU side. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
 #define     DMA_REGION_SIZE     ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * (DMA_CPU_BUFS))
@@ -712,7 +712,7 @@ int enable_ghosting()
 {
     /* Allocate RX DMA region using kmalloc (instead of dma_alloc_coherent) since there's no actual
      * device present (dma_alloc_coherent requires a device argument). */
-    for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs > MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
+    for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs >= MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
         dma_region_size = ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * dma_cpu_bufs);
         
         /* Allocate TX DMA region. */
@@ -1526,7 +1526,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
         return err;
     }
 
-    for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs > MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
+    for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs >= MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
         dma_region_size = ((DMA_BUF_SIZE + OCDP_METADATA_SIZE + sizeof(uint32_t)) * dma_cpu_bufs);
         
         /* Allocate TX DMA region. */
