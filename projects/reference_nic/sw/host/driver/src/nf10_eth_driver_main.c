@@ -973,14 +973,14 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     netdev->trans_start = jiffies;
 
     /* First need to acquire lock to access TX DMA region (which is the RX DMA region in disguise). */
-    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+//    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
 
     if(tx_dma_stream.flags[tx_dma_stream.buf_index] == 1) {
         PDEBUG("nf10_ghost_xmit(): TX buffers full (@ buf %d)... dropping packet\n", tx_dma_stream.buf_index);
         netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
         /* Release lock (again, actually the RX DMA region lock). */
-        spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+//        spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
@@ -1004,7 +1004,7 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
         tx_dma_stream.buf_index = 0;
 
     /* Release the lock, finished with TX DMA region (RX DMA region in disguise). */
-    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags); 
+//    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags); 
 
     PDEBUG("nf10_ghost_xmit(): Packet TX info:\n"
         "\tMessage length:\t\t%d\n"
@@ -1319,7 +1319,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     PDEBUG("nf10_napi_struct_poll(): Beginning to slurp up packets with budget %d...\n", budget);
    
     /* First need to acquire lock to access the RX DMA region. */
-    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+//    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
 
     while(n_rx < budget && rx_dma_stream.flags[buf_index] == 1) {
 
@@ -1426,7 +1426,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     }
 
     /* Release the RX DMA region lock. */
-    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+//    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
     
     return n_rx;
 }
