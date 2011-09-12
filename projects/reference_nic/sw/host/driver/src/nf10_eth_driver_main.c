@@ -707,21 +707,9 @@ int genl_cmd_napi_disable(struct sk_buff *skb, struct genl_info *info)
     return 0;
 }
 
-/* Ghost enable command.
- * Application sends us this command to enable software ghosting of the 
- * 10G card. */
-int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
+/* Enable ghosting. */
+int enable_ghosting()
 {
-    if(hw_state & HW_FOUND) {
-        printk(KERN_ERR "%s: ERROR: genl_cmd_ghost_enable(): cannot enable ghosting when hardware has been found\n", driver_name); 
-        return 0;
-    }
-
-    if(hw_state & HW_GHOST) {
-        printk(KERN_INFO "%s: INFO: genl_cmd_ghost_enable(): ghosting already enable\n", driver_name);
-        return 0;
-    }
-
     /* Allocate RX DMA region using kmalloc (instead of dma_alloc_coherent) since there's no actual
      * device present (dma_alloc_coherent requires a device argument). */
     for(dma_cpu_bufs = DMA_CPU_BUFS; dma_cpu_bufs > MIN_DMA_CPU_BUFS; dma_cpu_bufs /= 2) {
@@ -730,7 +718,7 @@ int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
         /* Allocate TX DMA region. */
         rx_dma_reg_va = kmalloc(dma_region_size, GFP_KERNEL | __GFP_NOWARN);
         if(rx_dma_reg_va == NULL) {
-            PDEBUG("genl_cmd_ghost_enable: failed to alloc RX DMA region of size %d bytes... trying less\n", dma_region_size);
+            PDEBUG("enable_ghosting: failed to alloc RX DMA region of size %d bytes... trying less\n", dma_region_size);
             /* Try smaller allocation. */
             continue;
         }
@@ -741,14 +729,14 @@ int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
 
     /* Check that the memory allocations succeeded. */
     if(rx_dma_reg_va == NULL) {
-        printk(KERN_ERR "nf10_eth_driver: ERROR: genl_cmd_ghost_enable: failed to allocate DMA regions\n");
-        return 0;        
+        printk(KERN_ERR "nf10_eth_driver: ERROR: enable_ghosting(): failed to allocate DMA regions\n");
+        return -1;        
     }
     
     /* Otherwise set TX region the same at the RX region. */
     tx_dma_reg_va = rx_dma_reg_va; 
 
-    PDEBUG("genl_cmd_ghost_enable: successfully allocated the TX and RX DMA regions:\n"
+    PDEBUG("enable_ghosting(): successfully allocated the TX and RX DMA regions:\n"
         "\tTX Region: Virtual address:\t0x%016llx\n"
         "\tTX Region Size:\t\t\t%d\n"
         "\tRX Region: Virtual address:\t0x%016llx\n"
@@ -775,38 +763,28 @@ int genl_cmd_ghost_enable(struct sk_buff *skb, struct genl_info *info)
     rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
     add_timer(&rx_poll_timer);
  
-    hw_state |= HW_GHOST;
-
-    PDEBUG("genl_cmd_ghost_enable(): ghosting enabled\n");    
+    PDEBUG("enable_ghosting(): ghosting enabled\n");    
 
     return 0;
 }
 
-/* Ghosting disable command.
- * Application sends us this command to disable software ghosting of the
- * 10G card. */
-int genl_cmd_ghost_disable(struct sk_buff *skb, struct genl_info *info)
+/* Disable ghosting. */
+int disable_ghosting()
 {
-    if(hw_state & HW_GHOST) {
-        /* Stop the polling timer for receiving packets. */
-        del_timer(&rx_poll_timer);
+    /* Stop the polling timer for receiving packets. */
+    del_timer(&rx_poll_timer);
 
-        kfree(rx_dma_reg_va);
-        rx_dma_stream.buffers   = NULL;
-        rx_dma_stream.metadata  = NULL;
-        rx_dma_stream.flags     = NULL;
+    kfree(rx_dma_reg_va);
+    rx_dma_stream.buffers   = NULL;
+    rx_dma_stream.metadata  = NULL;
+    rx_dma_stream.flags     = NULL;
 
-        /* Setup TX DMA stream. In this case it's the same as the RX DMA stream. */
-        tx_dma_stream.buffers   = NULL;
-        tx_dma_stream.metadata  = NULL;
-        tx_dma_stream.flags     = NULL;
+    /* Setup TX DMA stream. In this case it's the same as the RX DMA stream. */
+    tx_dma_stream.buffers   = NULL;
+    tx_dma_stream.metadata  = NULL;
+    tx_dma_stream.flags     = NULL;
 
-        hw_state &= ~HW_GHOST;
-
-        PDEBUG("genl_cmd_ghost_disable(): ghosting disabled\n"); 
-    } else {
-        PDEBUG("genl_cmd_ghost_disable(): ghosting is already disabled...\n");
-    }
+    PDEBUG("disable_ghosting(): ghosting disabled\n"); 
 
     return 0;
 }
@@ -876,24 +854,6 @@ struct genl_ops genl_ops_napi_disable = {
     .dumpit     = NULL,
 };
 
-/* Register ghost enable operation genl structure. */
-struct genl_ops genl_ops_ghost_enable = {
-    .cmd        = NF10_GENL_C_GHOST_ENABLE,
-    .flags      = 0,
-    .policy     = nf10_genl_policy,
-    .doit       = genl_cmd_ghost_enable,
-    .dumpit     = NULL,
-};
-
-/* Register NAPI disable operation genl structure. */
-struct genl_ops genl_ops_ghost_disable = {
-    .cmd        = NF10_GENL_C_GHOST_DISABLE,
-    .flags      = 0,
-    .policy     = nf10_genl_policy,
-    .doit       = genl_cmd_ghost_disable,
-    .dumpit     = NULL,
-};
-
 static struct genl_ops *genl_all_ops[] = {
     &genl_ops_echo,
     &genl_ops_dma_tx,
@@ -902,8 +862,6 @@ static struct genl_ops *genl_all_ops[] = {
     &genl_ops_reg_wr,
     &genl_ops_napi_enable,
     &genl_ops_napi_disable,
-    &genl_ops_ghost_enable,
-    &genl_ops_ghost_disable,
 };
 
 /* These are the IDs of the PCI devices that this Ethernet driver supports. */
@@ -1060,11 +1018,11 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     uint32_t        opcode;
     unsigned long   tx_dma_region_spinlock_flags;
 
+#ifdef DRIVER_GHOST
     /* If the driver is ghosting the hardware then use a special function
      * for this. */
-    if(hw_state & HW_GHOST) {
-        return nf10_ghost_xmit(skb, netdev);
-    }
+    return nf10_ghost_xmit(skb, netdev);
+#endif
 
     /* Otherwise send the packet to the hardware. */
     PDEBUG("nf10_ndo_start_xmit(): Transmitting packet\n");    
@@ -1368,10 +1326,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
 
-            if(!(hw_state & HW_GHOST)) {
-                /* Tell the hardware we emptied the buffer. */
-                *rx_dma_stream.doorbell = 1;
-            }
+#ifndef DRIVER_GHOST
+            /* Tell the hardware we emptied the buffer. */
+            *rx_dma_stream.doorbell = 1;
+#endif
 
             /* Update the buffer index. */
             if(++rx_dma_stream.buf_index == dma_cpu_bufs)
@@ -1391,10 +1349,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
 
-            if(!(hw_state & HW_GHOST)) {
-                /* Tell the hardware we emptied the buffer. */
-                *rx_dma_stream.doorbell = 1;
-            }
+#ifndef DRIVER_GHOST
+            /* Tell the hardware we emptied the buffer. */
+            *rx_dma_stream.doorbell = 1;
+#endif
 
             /* Update the buffer index. */
             if(++rx_dma_stream.buf_index == dma_cpu_bufs)
@@ -1426,10 +1384,10 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         /* Mark the buffer as empty. */
         rx_dma_stream.flags[buf_index] = 0;
 
-        if(!(hw_state & HW_GHOST)) {
-            /* Tell the hardware we emptied the buffer. */
-            *rx_dma_stream.doorbell = 1;
-        }
+#ifndef DRIVER_GHOST
+        /* Tell the hardware we emptied the buffer. */
+        *rx_dma_stream.doorbell = 1;
+#endif
 
         /* Update the buffer index. */
         if(++rx_dma_stream.buf_index == dma_cpu_bufs)
@@ -2052,6 +2010,7 @@ static int __init nf10_eth_driver_init(void)
     /* Enable NAPI. */
     napi_enable(&nf10_napi_struct);
 
+#ifndef DRIVER_GHOST
     /* Register the pci_driver. 
      * Note: This will succeed even without a card installed in the system. */
     err = pci_register_driver(&nf10_pci_driver);
@@ -2068,7 +2027,17 @@ static int __init nf10_eth_driver_init(void)
         printk(KERN_WARNING "nf10_eth_driver: WARNING: A NetFPGA-10G device was found but could not be properly initialized... driver may be in an unstable state\n");
 
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver version %s Loaded.\n", NF10_ETH_DRIVER_VERSION);
-    
+#else
+    err = enable_ghosting();
+    if(err != 0) {
+        printk(KERN_ERR "nf10_eth_driver: ERROR: nf10_eth_driver_init(): failed to enable ghosting mode...\n");
+        return err;
+    } else
+        PDEBUG("nf10_eth_driver_init(): enable ghosting... victory!\n");
+
+    printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver version %s Loaded in Hardware Ghosting Mode.\n", NF10_ETH_DRIVER_VERSION);
+#endif
+ 
     return 0;
 }
 
@@ -2100,11 +2069,11 @@ static void __exit nf10_eth_driver_exit(void)
         free_netdev(nf10_netdevs[i]);
     }
 
+#ifndef DRIVER_GHOST
     pci_unregister_driver(&nf10_pci_driver);
-   
-    if(hw_state & HW_GHOST) {
-        kfree(rx_dma_reg_va);
-    }
+#else
+    disable_ghosting();
+#endif
 
     printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver Unloaded.\n");
 }
