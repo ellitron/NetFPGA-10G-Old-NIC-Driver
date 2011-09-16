@@ -1437,7 +1437,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
     add_timer(&rx_poll_timer);
 
-    return n_rx;
+    return 0;
      
     /* Check if we processed everything. */
 //    if(rx_dma_stream.flags[buf_index] == 0) {
