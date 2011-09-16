@@ -1345,6 +1345,8 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         if(dst_iface < 0) {
             printk(KERN_NOTICE "NOTICE: nf10_napi_struct_poll(): failed to determine destination Ethernet interface from opcode (0x%08x)... dropping the packet\n", rx_dma_stream.metadata[buf_index].opCode);
 
+            mb();
+
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
 
@@ -1367,6 +1369,8 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         skb = dev_alloc_skb(rx_dma_stream.metadata[buf_index].length);
         if(!skb) {
             printk(KERN_NOTICE "NOTICE: nf10_napi_struct_poll(): failed to allocate skb, packet dropped\n");
+
+            mb();
 
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
@@ -1403,6 +1407,13 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
 
         netif_receive_skb(skb);
 
+        /* Update statistics. */
+        nf10_netdevs[dst_iface]->stats.rx_packets++;
+        nf10_netdevs[dst_iface]->stats.rx_bytes += rx_dma_stream.metadata[buf_index].length;
+
+        /* Make sure everything has gone through before setting flag. */
+        mb();
+    
         /* Mark the buffer as empty. */
         rx_dma_stream.flags[buf_index] = 0;
 
@@ -1411,16 +1422,14 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         *rx_dma_stream.doorbell = 1;
 #endif
 
+        mb();
+
         /* Update the buffer index. */
         if(++rx_dma_stream.buf_index == dma_cpu_bufs)
             rx_dma_stream.buf_index = 0;
         
-        /* Update statistics. */
-        nf10_netdevs[dst_iface]->stats.rx_packets++;
-        nf10_netdevs[dst_iface]->stats.rx_bytes += rx_dma_stream.metadata[buf_index].length;
-
         buf_index = rx_dma_stream.buf_index;       
-
+        
         n_rx++;
     }    
     
