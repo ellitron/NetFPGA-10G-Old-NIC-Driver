@@ -986,6 +986,8 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
         return NETDEV_TX_OK;
     }
 
+    mb();
+
     /* Copy message into buffer. */
     memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
 
@@ -997,8 +999,14 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     /* OpCode. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = opcode;
 
+    /* Memory barrier just in case. Make sure everything above this point 
+     * has occurred before setting the buffer flag. */
+    mb();
+
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 1;
+
+    mb();
 
     /* Update the buffer index. */
     if(++tx_dma_stream.buf_index == dma_cpu_bufs)
