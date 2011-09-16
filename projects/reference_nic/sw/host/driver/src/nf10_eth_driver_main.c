@@ -100,7 +100,7 @@ spinlock_t          rx_dma_region_spinlock = SPIN_LOCK_UNLOCKED;
 /* DMA parameters. */
 #define     DMA_BUF_SIZE        2048    /* Size of buffer for each DMA transfer. Property of the hardware. */
 #define     DMA_FPGA_BUFS       4       /* Number of buffers on the FPGA side. Property of the hardware. */
-#define     DMA_CPU_BUFS        4   /* Number of buffers on the CPU side. */
+#define     DMA_CPU_BUFS        32768   /* Number of buffers on the CPU side. */
 #define     MIN_DMA_CPU_BUFS    1       /* Minimum number of buffers on the CPU side. */
 
 /* Total size of a DMA region (1 region for TX, 1 region for RX). */
@@ -918,7 +918,7 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     struct iphdr    *ip;
     uint32_t        *saddr;
     uint32_t        *daddr;
-    unsigned long   rx_dma_region_spinlock_flags;
+    unsigned long   tx_dma_region_spinlock_flags;
 
     /* Get data and length. */
     data = (void*)skb->data;
@@ -973,14 +973,15 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     netdev->trans_start = jiffies;
 
     /* First need to acquire lock to access TX DMA region (which is the RX DMA region in disguise). */
-//    spin_lock_irqsave(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
+    spin_lock_irqsave(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags);
 
     if(tx_dma_stream.flags[tx_dma_stream.buf_index] == 1) {
+        /* Release lock (again, actually the RX DMA region lock). */
+        spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags);
+
         PDEBUG("nf10_ghost_xmit(): TX buffers full (@ buf %d)... dropping packet\n", tx_dma_stream.buf_index);
         netdev->stats.tx_dropped++;
         dev_kfree_skb(skb);
-        /* Release lock (again, actually the RX DMA region lock). */
-//        spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
         /* FIXME: not really sure of the right return value in this case... */
         return NETDEV_TX_OK;
     }
@@ -1004,7 +1005,7 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
         tx_dma_stream.buf_index = 0;
 
     /* Release the lock, finished with TX DMA region (RX DMA region in disguise). */
-//    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags); 
+    spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
 
     PDEBUG("nf10_ghost_xmit(): Packet TX info:\n"
         "\tMessage length:\t\t%d\n"
