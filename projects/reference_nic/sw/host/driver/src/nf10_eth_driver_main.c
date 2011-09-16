@@ -1013,9 +1013,6 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     /* Release the lock, finished with TX DMA region (RX DMA region in disguise). */
     spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
 
-    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
-    dev_kfree_skb(skb);
-
     PDEBUG("nf10_ghost_xmit(): Packet TX info:\n"
         "\tMessage length:\t\t%d\n"
         "\tOpcode:\t\t\t0x%08x\n"
@@ -1025,6 +1022,9 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     /* Update the statistics. */
     netdev->stats.tx_packets++;
     netdev->stats.tx_bytes += len;
+
+    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
+    dev_kfree_skb(skb);
 
     return NETDEV_TX_OK;
 }
