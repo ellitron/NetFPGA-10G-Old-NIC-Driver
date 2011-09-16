@@ -991,8 +991,6 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
     /* Copy message into buffer. */
     memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
 
-    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
-
     /* Fill out metadata. */
     /* Length. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].length = len;
@@ -1014,6 +1012,9 @@ static netdev_tx_t nf10_ghost_xmit(struct sk_buff *skb, struct net_device *netde
 
     /* Release the lock, finished with TX DMA region (RX DMA region in disguise). */
     spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
+
+    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
+    dev_kfree_skb(skb);
 
     PDEBUG("nf10_ghost_xmit(): Packet TX info:\n"
         "\tMessage length:\t\t%d\n"
