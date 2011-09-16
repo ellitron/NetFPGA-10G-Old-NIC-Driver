@@ -1432,21 +1432,27 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         
         n_rx++;
     }    
-    
+
+    napi_complete(napi);
+    rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+    add_timer(&rx_poll_timer);
+
+    return n_rx;
+     
     /* Check if we processed everything. */
-    if(rx_dma_stream.flags[buf_index] == 0) {
-        PDEBUG("nf10_napi_struct_poll(): Slurped up all the packets there were to slurp!\n");
-        napi_complete(napi);
-        rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
-        add_timer(&rx_poll_timer);
-    } else {
-        PDEBUG("nf10_napi_struct_poll(): Slurped %d packets but still more left...\n", n_rx);
-    }
+//    if(rx_dma_stream.flags[buf_index] == 0) {
+//        PDEBUG("nf10_napi_struct_poll(): Slurped up all the packets there were to slurp!\n");
+//        napi_complete(napi);
+//        rx_poll_timer.expires = jiffies + RX_POLL_INTERVAL;
+//        add_timer(&rx_poll_timer);
+//    } else {
+//        PDEBUG("nf10_napi_struct_poll(): Slurped %d packets but still more left...\n", n_rx);
+//    }
 
     /* Release the RX DMA region lock. */
 //    spin_unlock_irqrestore(&rx_dma_region_spinlock, rx_dma_region_spinlock_flags);
     
-    return n_rx;
+//    return n_rx;
 }
 
 /* When the kernel finds a device with a vendor and device ID associated with this driver
