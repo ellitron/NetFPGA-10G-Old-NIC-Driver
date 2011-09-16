@@ -123,11 +123,11 @@ struct napi_struct nf10_napi_struct;
 
 /* Bundle of variables to keep track of a unidirectional DMA stream. */
 struct dma_stream {
-    uint8_t         *buffers;
-    OcdpMetadata    *metadata;
-    uint32_t        *flags;
-    uint32_t        *doorbell;
-    uint32_t        buf_index;
+    uint8_t             *buffers;
+    OcdpMetadata        *metadata;
+    volatile uint32_t   *flags;
+    uint32_t            *doorbell;
+    uint32_t            buf_index;
 };
 
 static const struct net_device_ops nf10_netdev_ops = {
