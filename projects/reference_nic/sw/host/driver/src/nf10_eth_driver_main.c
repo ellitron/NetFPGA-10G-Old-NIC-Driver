@@ -1133,13 +1133,14 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Copy message into buffer. */
     memcpy((void*)&tx_dma_stream.buffers[tx_dma_stream.buf_index * DMA_BUF_SIZE], data, len);
 
-    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
-
     /* Fill out metadata. */
     /* Length. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].length = len;
     /* OpCode. */
     tx_dma_stream.metadata[tx_dma_stream.buf_index].opCode = opcode;
+
+    /* Make sure that the modifications above occur before flag is set. */
+    mb();
 
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
@@ -1166,6 +1167,9 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Update the statistics. */
     netdev->stats.tx_packets++;
     netdev->stats.tx_bytes += len;
+
+    /* FIXME: Do I need to dev_kfree_skb(skb) here? It seems like this is only done on error. */
+    dev_kfree_skb(skb);
 
     return NETDEV_TX_OK;
 }
