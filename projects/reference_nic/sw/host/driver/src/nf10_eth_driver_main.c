@@ -113,7 +113,7 @@ uint32_t dma_region_size;
 #define     RX_POLL_INTERVAL    1
 
 /* Weight used in NAPI for polling. */
-#define     RX_POLL_WEIGHT      16
+#define     RX_POLL_WEIGHT      64
 
 /* Polling timer for received packets. */
 struct timer_list rx_poll_timer = TIMER_INITIALIZER(rx_poll_timer_cb, 0, 0);
