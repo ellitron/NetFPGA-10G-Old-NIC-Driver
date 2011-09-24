@@ -1172,15 +1172,11 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
-    /* Update the buffer index. */
-    if(++tx_dma_stream.buf_index == dma_cpu_bufs)
-        tx_dma_stream.buf_index = 0;
-
     /* Release the lock, finished with TX DMA region. */
     spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
 
     /* Make sure all the writes have been done before ringing the doorbell. */
-    wmb();
+    mb();
 
     /* Tell hardware we filled a buffer. */
     *tx_dma_stream.doorbell = 1;
@@ -1190,6 +1186,10 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
         "\tOpcode:\t\t\t0x%08x\n"
         "\tUsing buffer number:\t%d\n",
         skb->len, opcode, tx_dma_stream.buf_index);
+
+    /* Update the buffer index. */
+    if(++tx_dma_stream.buf_index == dma_cpu_bufs)
+        tx_dma_stream.buf_index = 0;
 
     /* Update the statistics. */
     netdev->stats.tx_packets++;
@@ -1381,6 +1381,8 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
 
             /* Mark the buffer as empty. */
             rx_dma_stream.flags[buf_index] = 0;
+
+            mb();
 
 #ifndef DRIVER_GHOST
             /* Tell the hardware we emptied the buffer. */
