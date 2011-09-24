@@ -66,6 +66,9 @@ uint32_t                        tx_get_src_iface(uint32_t opcode);
 void                            tx_set_dst_iface(uint32_t *opcode, uint32_t dst_iface);
 void                            tx_set_src_iface(uint32_t *opcode, uint32_t src_iface);
 
+int                             enable_ghosting(void);
+int                             disable_ghosting(void);
+
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
@@ -1036,6 +1039,13 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     int             iface;
     uint32_t        opcode;
     unsigned long   tx_dma_region_spinlock_flags;
+#ifdef DRIVER_LOOPB
+    /* Specially used for flipping IP address bits for loopback. */
+    struct ethhdr   *eth;
+    struct iphdr    *ip;
+    uint32_t        *saddr;
+    uint32_t        *daddr;
+#endif
 
 #ifdef DRIVER_GHOST
     /* If the driver is ghosting the hardware then use a special function
@@ -1088,6 +1098,23 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
         return NETDEV_TX_OK;
     }
     tx_set_src_iface(&opcode, iface); 
+
+#ifdef DRIVER_LOOPB
+    /* Do a switcharoo on the packet's IP address. */
+    eth = (struct ethhdr *)((char*)data);
+
+    if(eth->h_proto == htons(ETH_P_IP)) {
+        ip      = (struct iphdr *)(((char*)data) + sizeof(struct ethhdr));
+        saddr   = &(ip->saddr);
+        daddr   = &(ip->daddr);
+        /* Flip the last bit of the 3rd octet of the addresses. */
+        ((uint8_t *)saddr)[2] ^= 1;
+        ((uint8_t *)daddr)[2] ^= 1;
+        /* Fix the checksum. */
+        ip->check = 0;         /* and rebuild the checksum (ip needs it) */
+        ip->check = ip_fast_csum((unsigned char *)ip,ip->ihl);
+    }
+#endif
 
     /* DMA the packet to the hardware. */
 
@@ -1328,7 +1355,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
     struct sk_buff  *skb;
     int             buf_index = rx_dma_stream.buf_index;
     int             dst_iface; /* Destination interface. */
-    unsigned long   rx_dma_region_spinlock_flags;
+//    unsigned long   rx_dma_region_spinlock_flags;
 
     PDEBUG("nf10_napi_struct_poll(): Beginning to slurp up packets with budget %d...\n", budget);
    
@@ -1405,7 +1432,7 @@ static int nf10_napi_struct_poll(struct napi_struct *napi, int budget)
         /* FIXME: need to set ip_summed? */
         skb->protocol = eth_type_trans(skb, nf10_netdevs[dst_iface]);
        
-#ifdef DRIVER_GHOST 
+#if defined(DRIVER_GHOST) || defined(DRIVER_LOOPB) 
         /* This is for ghosting mode. */
         skb->ip_summed = CHECKSUM_UNNECESSARY; /* don't check it */       
 #endif 
@@ -1932,7 +1959,7 @@ void nf10_netdev_init(struct net_device *netdev)
 
     netdev->netdev_ops  = &nf10_netdev_ops;
 
-#ifdef DRIVER_GHOST
+#if defined(DRIVER_GHOST) || defined(DRIVER_LOOPB)
     /* These are for ghosting mode. */
     netdev->header_ops  = &nf10_netdev_header_ops;
     netdev->flags       |= IFF_NOARP;
