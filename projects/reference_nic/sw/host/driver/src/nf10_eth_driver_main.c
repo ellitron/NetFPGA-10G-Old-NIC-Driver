@@ -129,7 +129,7 @@ struct dma_stream {
     uint8_t             *buffers;
     OcdpMetadata        *metadata;
     volatile uint32_t   *flags;
-    uint32_t            *doorbell;
+    volatile uint32_t   *doorbell;
     uint32_t            buf_index;
 };
 
@@ -1756,8 +1756,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
     tx_dma_stream.buffers    = (uint8_t *)tx_dma_reg_va;
     tx_dma_stream.metadata    = (OcdpMetadata *)(tx_dma_stream.buffers + dma_cpu_bufs * DMA_BUF_SIZE);
-    tx_dma_stream.flags    = (uint32_t *)(tx_dma_stream.metadata + dma_cpu_bufs);
-    tx_dma_stream.doorbell    = &dp0_props->nRemoteDone; 
+    tx_dma_stream.flags    = (volatile uint32_t *)(tx_dma_stream.metadata + dma_cpu_bufs);
+    tx_dma_stream.doorbell    = (volatile uint32_t *)&dp0_props->nRemoteDone; 
     tx_dma_stream.buf_index    = 0;
     memset((void*)tx_dma_stream.flags, 1, dma_cpu_bufs * sizeof(uint32_t));
 
@@ -1778,8 +1778,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
     rx_dma_stream.buffers    = (uint8_t *)rx_dma_reg_va;
     rx_dma_stream.metadata    = (OcdpMetadata *)(rx_dma_stream.buffers + dma_cpu_bufs * DMA_BUF_SIZE);
-    rx_dma_stream.flags    = (uint32_t *)(rx_dma_stream.metadata + dma_cpu_bufs);
-    rx_dma_stream.doorbell    = &dp1_props->nRemoteDone; 
+    rx_dma_stream.flags    = (volatile uint32_t *)(rx_dma_stream.metadata + dma_cpu_bufs);
+    rx_dma_stream.doorbell    = (volatile uint32_t *)&dp1_props->nRemoteDone; 
     rx_dma_stream.buf_index    = 0;
     memset((void*)rx_dma_stream.flags, 0, dma_cpu_bufs * sizeof(uint32_t));
 
