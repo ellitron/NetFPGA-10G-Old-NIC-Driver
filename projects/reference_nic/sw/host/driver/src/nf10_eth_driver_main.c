@@ -72,7 +72,7 @@ int                             disable_ghosting(void);
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.2.3"
+#define NF10_ETH_DRIVER_VERSION     "1.3.0"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
