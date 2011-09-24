@@ -2100,7 +2100,12 @@ static int __init nf10_eth_driver_init(void)
     else if(!(hw_state & HW_INIT))
         printk(KERN_WARNING "nf10_eth_driver: WARNING: A NetFPGA-10G device was found but could not be properly initialized... driver may be in an unstable state\n");
 
-    printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver version %s Loaded.\n", NF10_ETH_DRIVER_VERSION);
+#ifdef DRIVER_LOOPB
+    printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver version %s Loaded in Hardware Loopback Mode.\n", NF10_ETH_DRIVER_VERSION);
+#else
+    printk(KERN_INFO "nf10_eth_driver: NetFPGA-10G Ethernet Driver version %s Loaded.\n", NF10_ETH_DRIVER_VERSION)    
+#endif
+
 #else
     err = enable_ghosting();
     if(err != 0) {
