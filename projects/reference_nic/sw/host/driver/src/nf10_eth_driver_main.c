@@ -72,7 +72,7 @@ int                             disable_ghosting(void);
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.3.0"
+#define NF10_ETH_DRIVER_VERSION     "1.3.1"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
@@ -1172,9 +1172,6 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Set the buffer flag to full. */
     tx_dma_stream.flags[tx_dma_stream.buf_index] = 0;
 
-    /* Release the lock, finished with TX DMA region. */
-    spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
-
     /* Make sure all the writes have been done before ringing the doorbell. */
     mb();
 
@@ -1190,6 +1187,9 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
     /* Update the buffer index. */
     if(++tx_dma_stream.buf_index == dma_cpu_bufs)
         tx_dma_stream.buf_index = 0;
+
+    /* Release the lock, finished with TX DMA region. */
+    spin_unlock_irqrestore(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags); 
 
     /* Update the statistics. */
     netdev->stats.tx_packets++;
