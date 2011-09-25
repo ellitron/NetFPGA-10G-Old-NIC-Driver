@@ -72,7 +72,7 @@ int                             disable_ghosting(void);
 char driver_name[] = "nf10_eth_driver";
 
 /* Driver version. */
-#define NF10_ETH_DRIVER_VERSION     "1.3.1"
+#define NF10_ETH_DRIVER_VERSION     "1.3.2"
 
 /* Number of network devices. */
 #define NUM_NETDEVS 4
@@ -1118,11 +1118,11 @@ static netdev_tx_t nf10_ndo_start_xmit(struct sk_buff *skb, struct net_device *n
 
     /* DMA the packet to the hardware. */
 
-    /* Start the clock! */
-    netdev->trans_start = jiffies;
-
     /* First need to acquire lock to access the TX DMA region. */
     spin_lock_irqsave(&tx_dma_region_spinlock, tx_dma_region_spinlock_flags);
+
+    /* Start the clock! */
+    netdev->trans_start = jiffies;
 
     /* FIXME: For now we'll just drop packets when the buffer is full.
      * An alternative would be to stash the skb, call netif_stop_queue, set
@@ -1942,12 +1942,12 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
     c += sprintf(&buf[c], "TX Flags:\n");    
 
     for(i=0; i<dma_cpu_bufs; i++)
-        c += sprintf(&buf[c], "\t%d:\t0x%08x\n", i, tx_dma_stream.flags[i]);
+        c += sprintf(&buf[c], "\t%d:\t0x%d\n", i, tx_dma_stream.flags[i]);
 
     c += sprintf(&buf[c], "RX Flags:\n");
     
     for(i=0; i<dma_cpu_bufs; i++)
-        c += sprintf(&buf[c], "\t%d:\t0x%08x\n", i, rx_dma_stream.flags[i]);    
+        c += sprintf(&buf[c], "\t%d:\t0x%d\n", i, rx_dma_stream.flags[i]);    
 
     *eof = 1;
     return c; 
