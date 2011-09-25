@@ -1942,12 +1942,12 @@ int read_proc(char *buf, char **start, off_t offset, int count, int *eof, void *
     c += sprintf(&buf[c], "TX Flags:\n");    
 
     for(i=0; i<dma_cpu_bufs; i++)
-        c += sprintf(&buf[c], "\t%d:\t0x%d\n", i, tx_dma_stream.flags[i]);
+        c += sprintf(&buf[c], "\t%d: %d\n", i, tx_dma_stream.flags[i]);
 
     c += sprintf(&buf[c], "RX Flags:\n");
     
     for(i=0; i<dma_cpu_bufs; i++)
-        c += sprintf(&buf[c], "\t%d:\t0x%d\n", i, rx_dma_stream.flags[i]);    
+        c += sprintf(&buf[c], "\t%d: %d\n", i, rx_dma_stream.flags[i]);    
 
     *eof = 1;
     return c; 
